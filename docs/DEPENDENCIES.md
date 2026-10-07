@@ -30,6 +30,8 @@ flowchart LR
 
 ## r3 MCU 补丁
 
+C8P 用户可直接使用[C8P 构建脚本](C8P_FIRMWARE.md)：分别生成普通 USB 或 USB 转 CAN 1M 固件，强制核对 LYX／TMC 所需构建选项和命令字典。两种固件只改变主机到 MCU 的连接方式，驱动侧 LYX 单线 UART 的协议不变。脚本不会安装主机模块或刷写设备。
+
 [firmware/modbus_uart-r3.patch](../firmware/modbus_uart-r3.patch) 只针对上述固定作者版本的 `src/modbus_uart.c`。变更是把等待第一起始位的轮询从一个 bit 周期改为四分之一 bit（至少一个时钟 tick），并重新计算计数上限，保留原先约 299 bit 的首次轮询到超时跨度。协议、发送后等待 20 bit 和数据位采样没有重写，后续字节仍按固定节拍采样。
 
 原版文件 SHA256：`895b6dcba659e4585097de958d5d90db51c4862ba1d24013334809b1a1f7526c`。
@@ -53,6 +55,12 @@ make
 作者固定版本已在 `src/Kconfig` 中定义依赖 `HAVE_GPIO` 的 `WANT_MODBUSUART`，并在 Makefile 中按 `CONFIG_WANT_MODBUSUART` 编译该 C 文件。不需要把本仓库的补丁当成完整 Klipper 移植包。移植到其他 Klipper/FlyOS 分支时，必须分别核对原始源文件、构建选项与补丁基础，不能直接覆盖整份 Kconfig／Makefile。
 
 `menuconfig` 的处理器、引导偏移、晶振、USB/CAN/UART 主机连接和 CAN 速率按主板版本及现有引导程序选择。MCU 与驱动之间的单线 UART，和主机到 MCU 的 USB/CAN，是两条不同链路。没有适用于全部板卡的 `.config` 或刷写命令；本仓库不分发通用二进制固件。
+
+### 源码与主机必须配套
+
+C8P 脚本接受明确的 `--source`，在新的目录集成 LYX 并构建。FLYOS 应优先使用本机实际运行的厂商源码，例如 `/data/klipper`，保留原有扩展接口；不会把整份 `src/Kconfig` 或 `src/Makefile` 换成作者版本。复制源码和哈希检查不代表所有厂商版本都兼容，未知集成内容会拒绝。
+
+普通 Linux 也应优先选择本机对应源码；没有既有源码时，可按构建手册单独下载上面的固定作者提交。用作者源码构建不等于任意另一版主机都能连接，仍需核对主机与 MCU 协议。`scripts/install.py --with-lyx` 安装的是三份配套 LYX Python 模块，不会切换整套 Klipper 基础版本，也不会为未知主机版本作兼容保证。
 
 ## 已知兼容范围
 

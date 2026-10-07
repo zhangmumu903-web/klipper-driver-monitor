@@ -8,7 +8,8 @@ LYX9231 驱动的后台采集、使能后报警停机和 Fluidd 内嵌监测卡�
 
 1. **已有可工作的 LYX UART 固件及主机模块**：按[安装、升级与卸载](docs/INSTALLATION.md)安装监测模块和网页资源。
 2. **普通 Klipper 尚不认识 LYX**：先看[驱动与 MCU 依赖](docs/DEPENDENCIES.md)。仅复制 `driver_monitor.py` 不会增加 MCU 的 Modbus UART 命令。
-3. **只想了解原理**：看[后台实现](docs/ARCHITECTURE.md)与[网页显示逻辑](docs/DISPLAY.md)。
+3. **为 C8P 编译 USB 或 USB 转 CAN 固件**：使用[C8P 固件构建脚本](docs/C8P_FIRMWARE.md)，两种模式都编入 LYX Modbus UART 与 TMC UART／SPI。
+4. **只想了解原理**：看[后台实现](docs/ARCHITECTURE.md)与[网页显示逻辑](docs/DISPLAY.md)。
 
 ## 中文手册
 
@@ -16,6 +17,7 @@ LYX9231 驱动的后台采集、使能后报警停机和 Fluidd 内嵌监测卡�
 | --- | --- |
 | [安装、升级与卸载](docs/INSTALLATION.md) | 路径、目标身份、预览改动、备份安装、配置加载、验收、回退 |
 | [驱动与 MCU 依赖](docs/DEPENDENCIES.md) | 作者仓库来源、本项目修补、MCU 固件前提、单线 UART 边界 |
+| [C8P 固件构建](docs/C8P_FIRMWARE.md) | 普通 Linux／FLYOS、USB／USB 转 CAN 1M、隔离源码、产物与配套主机安装 |
 | [配置与命令](docs/CONFIGURATION.md) | CFG 三层配置、电流／细分／模式、监测命令与原生读写命令 |
 | [后台实现](docs/ARCHITECTURE.md) | 调度流程图、完整 UART 事务、共享锁、缓存、日志、报警保护 |
 | [网页显示逻辑](docs/DISPLAY.md) | 独立卡片、三秒缓存查询、曲线、时间、按钮、跨客户端目标校验 |
@@ -43,7 +45,18 @@ cd klipper-driver-monitor
 python3 scripts/install.py --help
 ```
 
-仓库为私有，克隆需要自己的 GitHub 访问权限；不要把令牌写进命令或配置。安装器提供 `plan`、`install`、`rollback`；`--with-lyx` 才会安装配套三份主机模块，并拒绝覆盖未知修改。
+安装器提供 `plan`、`install`、`rollback`；`--with-lyx` 才会安装配套三份主机模块，并拒绝覆盖未知修改。
+
+只编译 C8P 固件时，在仓库根目录选择一个入口；下面以 FLYOS 常见源码目录为例，普通 Linux 用自己的实际 Klipper 源码路径替换：
+
+```sh
+# 普通 USB：保留 LYX 和 TMC 能力。
+bash scripts/build-c8p-usb.sh --source /data/klipper
+# 或 USB 转 CAN 桥接，CAN 固定 1,000,000 bit/s。
+bash scripts/build-c8p-canbridge.sh --source /data/klipper
+```
+
+编译脚本只在新目录复制源码、集成补丁和生成产物；不会改运行中的源码、安装主机模块、刷 MCU 或重启。编译依赖、源码选择和输出文件见[C8P 构建手册](docs/C8P_FIRMWARE.md)。
 
 ## 开发与离线预览
 
@@ -63,8 +76,8 @@ Python 3.8+ 用于安装／预览工具，Node.js 18+ 用于前端测试；监�
 backend/        Klipper 扩展、样例配置与 60 项后端测试
 frontend/       无构建依赖的卡片、显示控制器及目标配置
 vendor/lyx/     固定来源的三份修补版主机模块及哈希
-firmware/       仅针对固定上游的 r3 UART 补丁，不含通用固件
-scripts/        可预览、备份、校验及回退的本机安装工具
+firmware/       固定来源的 r3 UART 补丁与构建材料，不含通用固件
+scripts/        本机安装工具、C8P USB／USB-CAN 隔离构建脚本
 config/         带注释的驱动 CFG 模板
 preview/        不连接打印机的模拟服务器
 tests/          安装与恢复测试

@@ -6,7 +6,7 @@
 
 ### 获取当前交付分支
 
-当前软件在 `feat/initial-distribution` 分支，尚未合并到 `main`；此时 `main` 只有初始化 README。首次下载请显式选择下面的分支，再进入仓库。仓库为私有，请使用自己正常的 GitHub 登录权限，不把 token 拼进 URL、命令或教程。
+当前软件在 `feat/initial-distribution` 分支，尚未合并到 `main`；此时 `main` 只有初始化 README。首次下载请显式选择下面的分支，再进入仓库。
 
 ```bash
 git clone --branch feat/initial-distribution --single-branch https://github.com/zhangmumu903-web/klipper-driver-monitor.git
@@ -24,6 +24,8 @@ git status --short
 ```
 
 先按[依赖说明](DEPENDENCIES.md)确认匹配的 LYX 主机模块与 MCU 命令。已经稳定通信的机器不需要为安装监测卡片再次刷固件。
+
+需要构建 C8P 的 USB 或 USB 转 CAN 1M 固件时，先按[C8P 构建手册](C8P_FIRMWARE.md)选择与运行主机相匹配的源码。构建脚本不安装这里的 Python 模块；本节的 `--with-lyx` 只安装主机三模块，两者分别执行、分别验收。FLYOS 优先将本机 `/data/klipper` 作为构建输入，保留厂商接口；不要仅为新增 LYX 替换整个厂商 Klipper。
 
 | 项目 | 常见目录示例 | FLYOS 已验证布局示例 |
 | --- | --- | --- |
