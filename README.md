@@ -1,14 +1,35 @@
 # Klipper Driver Monitor
 
-LYX9231 驱动的后台采集、使能后报警停机和 Fluidd 内嵌监测卡片。每个已配置驱动一张卡片；网页关闭后，采集与保护继续由 Klipper 运行。
+Klipper 驱动监测扩展：LYX9231 后台采集、使能后报警停机，以及 Fluidd 每驱动独立卡片。TMC 卡片展示 Klipper 已有缓存；网页关闭后，LYX 采集与保护继续由 Klipper 运行。
 
 本项目由已在 FLY C8 Pro 上使用的实现整理而来。LYX 主动读取报警、转速和角度误差；TMC 卡片展示 Klipper 已有缓存。它不是原厂调参上位机的完整替代品，也不是官方 Klipper／Fluidd 插件。
 
+## 通用安装
+
+安装入口适用于已有 Klipper 的 Linux 主机，普通 Linux 与 FLYOS 使用同一个脚本，**不限定 C8P 或 MCU 型号**。需要 Bash 和 Python 3.8+。当前交付在 `feat/initial-distribution`，尚未合入 `main`：
+
+```sh
+git clone --branch feat/initial-distribution --single-branch https://github.com/zhangmumu903-web/klipper-driver-monitor.git
+cd klipper-driver-monitor
+bash install.sh
+```
+
+向导先选择“后台 + Fluidd／仅后台／仅 Fluidd”；安装后台时再选择“LYX（可同时使用 TMC）／纯 TMC”。它列出本机常见路径供确认，也可填写自定义目录；多个候选不会自动替你决定。计划展示后，输入明确的 `yes` 才写文件并备份。
+
+```sh
+# 只生成安装计划；不执行安装。
+bash install.sh --plan
+# 无交互终端或需要明确参数时，使用直接命令行。
+bash install.sh plan --help
+```
+
+下载仓库需要网络；安装工具本身不联网、不改 CFG、不重启服务、不刷 MCU。文件安装后，按[安装手册](docs/INSTALLATION.md)加载后台配置和检查页面。纯 TMC 安装不要求 LYX 模块；使用其他前端时可只装后台，本仓库的卡片仅支持 Fluidd 的同源网站根路径部署。
+
 ## 先读这里
 
-1. **已有可工作的 LYX UART 固件及主机模块**：按[安装、升级与卸载](docs/INSTALLATION.md)安装监测模块和网页资源。
+1. **只安装监测功能**：使用上面的通用入口；也可按[安装、升级与卸载](docs/INSTALLATION.md)分别安装后台和 Fluidd。
 2. **普通 Klipper 尚不认识 LYX**：先看[驱动与 MCU 依赖](docs/DEPENDENCIES.md)。仅复制 `driver_monitor.py` 不会增加 MCU 的 Modbus UART 命令。
-3. **为 C8P 编译 USB 或 USB 转 CAN 固件**：使用[C8P 固件构建脚本](docs/C8P_FIRMWARE.md)，两种模式都编入 LYX Modbus UART 与 TMC UART／SPI。
+3. **可选的 C8P 固件工具**：仅在另需构建 C8P 固件时使用[C8P 构建脚本](docs/C8P_FIRMWARE.md)。安装监测脚本不要求使用这两个入口，其他主板仍按自己的 Klipper 编译流程处理。
 4. **只想了解原理**：看[后台实现](docs/ARCHITECTURE.md)与[网页显示逻辑](docs/DISPLAY.md)。
 
 ## 中文手册
@@ -35,28 +56,9 @@ LYX9231 驱动的后台采集、使能后报警停机和 Fluidd 内嵌监测卡�
 
 保护默认关闭，需要在自己的机器核实后显式开启。它依赖软件轮询和 Klipper 逻辑使能，不能代替驱动自身硬件保护。通信失败不冒充报警码；没有硬性一秒内停机保证。真实故障停机尚未实机验证，详见验证章节。
 
-## 安装入口
+## 安装选项
 
-安装工具使用 Python 标准库，不联网、不改 `printer.cfg`、不重启服务、不运动、不刷 MCU。当前交付在 `feat/initial-distribution`，尚未合入 `main`；先下载该分支，再按安装章节选择普通 Linux 或 FLYOS 命令并确认路径及目标：
-
-```sh
-git clone --branch feat/initial-distribution --single-branch https://github.com/zhangmumu903-web/klipper-driver-monitor.git
-cd klipper-driver-monitor
-python3 scripts/install.py --help
-```
-
-安装器提供 `plan`、`install`、`rollback`；`--with-lyx` 才会安装配套三份主机模块，并拒绝覆盖未知修改。
-
-只编译 C8P 固件时，在仓库根目录选择一个入口；下面以 FLYOS 常见源码目录为例，普通 Linux 用自己的实际 Klipper 源码路径替换：
-
-```sh
-# 普通 USB：保留 LYX 和 TMC 能力。
-bash scripts/build-c8p-usb.sh --source /data/klipper
-# 或 USB 转 CAN 桥接，CAN 固定 1,000,000 bit/s。
-bash scripts/build-c8p-canbridge.sh --source /data/klipper
-```
-
-编译脚本只在新目录复制源码、集成补丁和生成产物；不会改运行中的源码、安装主机模块、刷 MCU 或重启。编译依赖、源码选择和输出文件见[C8P 构建手册](docs/C8P_FIRMWARE.md)。
+直接命令支持 `--components all|backend|fluidd` 和 `--drivers lyx|tmc`，默认分别为 `all` 和 `lyx`。`--drivers` 只选择安装依赖，不隐藏运行时已有驱动。安装器保留 `plan`、`install`、`rollback`；只有 `--with-lyx` 才会安装配套三份 LYX 主机模块，并拒绝覆盖未知修改。只装后台不要求网页路径／地址；只装 Fluidd 不要求 Klipper 源码路径，也不会安装 LYX 模块。纯 TMC 可只装 Fluidd，使用现有缓存，无须新增后台配置。完整命令示例见[安装手册](docs/INSTALLATION.md)。
 
 ## 开发与离线预览
 
@@ -78,6 +80,7 @@ frontend/       无构建依赖的卡片、显示控制器及目标配置
 vendor/lyx/     固定来源的三份修补版主机模块及哈希
 firmware/       固定来源的 r3 UART 补丁与构建材料，不含通用固件
 scripts/        本机安装工具、C8P USB／USB-CAN 隔离构建脚本
+install.sh      通用交互安装入口
 config/         带注释的驱动 CFG 模板
 preview/        不连接打印机的模拟服务器
 tests/          安装与恢复测试

@@ -104,17 +104,22 @@ def patch_index(data, asset_dir):
 
 
 def build_plan(args):
-    klipper = Path(args.klipper).expanduser().resolve(strict=True)
-    fluidd = Path(args.fluidd).expanduser().resolve(strict=True)
-    extras = klipper / 'klippy/extras'
-    if not extras.is_dir() or extras.is_symlink():
-        raise ValueError('Expected klippy/extras under --klipper')
-    index = fluidd / 'index.html'
-    before_index = regular(index)
-    config = target_config(args.hostname, args.origin, args.api_url)
-    assets = make_assets(config)
-    version = digest(b''.join(name.encode() + assets[name] for name in sorted(assets)))[:16]
-    asset_dir = 'driver-monitor-' + version
+    # Default to the original all-components/LYX workflow for old callers.
+    components = getattr(args, 'components', 'all')
+    drivers = getattr(args, 'drivers', 'lyx')
+    with_lyx = getattr(args, 'with_lyx', False)
+    if components not in ('all', 'backend', 'fluidd'):
+        raise ValueError('Unsupported --components: %s' % components)
+    if drivers not in ('lyx', 'tmc'):
+        raise ValueError('Unsupported --drivers: %s' % drivers)
+    if with_lyx and drivers == 'tmc':
+        raise ValueError('--with-lyx cannot be combined with --drivers tmc')
+    if with_lyx and components == 'fluidd':
+        raise ValueError('--with-lyx requires backend or all components')
+    backend = components in ('all', 'backend')
+    web = components in ('all', 'fluidd')
+    paths = {'klipper': None, 'fluidd': None}
+    config = asset_dir = None
     changes = []
 
     def add(path, after):
@@ -122,29 +127,54 @@ def build_plan(args):
         if before != after:
             changes.append({'path': path, 'before': before, 'after': after})
 
-    provenance = json.loads(regular(ROOT / 'vendor/lyx/PROVENANCE.json'))
-    for name in LYX_FILES:
-        source = regular(ROOT / 'vendor/lyx' / name)
-        if digest(source) != provenance['patched_sha256'][name]:
-            raise ValueError('Packaged LYX source hash mismatch: ' + name)
-        installed = regular(extras / name, optional=True)
-        if args.with_lyx:
-            allowed = {provenance['upstream_sha256'][name], digest(source)}
-            if installed is not None and digest(installed) not in allowed:
-                raise ValueError('Unknown LYX edits; compare manually before replacing: ' + name)
-            add(extras / name, source)
-        elif installed != source:
-            raise ValueError('A matching patched LYX host module is required: %s; '
-                             'review --with-lyx or compare manually' % name)
-    add(extras / 'driver_monitor.py', regular(ROOT / 'backend/driver_monitor.py'))
-    for name, data in assets.items():
-        destination = fluidd / asset_dir / name
-        if destination.parent.is_symlink():
-            raise ValueError('Refusing symlink asset directory')
-        add(destination, data)
-    # Switch the web entry only after every asset is in place.
-    add(index, patch_index(before_index, asset_dir))
-    return {'config': config, 'asset_dir': asset_dir, 'changes': changes}
+    if backend:
+        if not getattr(args, 'klipper', None):
+            raise ValueError('--klipper is required for backend or all components')
+        klipper = Path(args.klipper).expanduser().resolve(strict=True)
+        extras = klipper / 'klippy/extras'
+        if not extras.is_dir() or extras.is_symlink():
+            raise ValueError('Expected klippy/extras under --klipper')
+        paths['klipper'] = str(klipper)
+        # TMC uses Klipper's existing modules. Do not inspect LYX files at all.
+        if drivers == 'lyx':
+            provenance = json.loads(regular(ROOT / 'vendor/lyx/PROVENANCE.json'))
+            for name in LYX_FILES:
+                source = regular(ROOT / 'vendor/lyx' / name)
+                if digest(source) != provenance['patched_sha256'][name]:
+                    raise ValueError('Packaged LYX source hash mismatch: ' + name)
+                installed = regular(extras / name, optional=True)
+                if with_lyx:
+                    allowed = {provenance['upstream_sha256'][name], digest(source)}
+                    if installed is not None and digest(installed) not in allowed:
+                        raise ValueError('Unknown LYX edits; compare manually before replacing: ' + name)
+                    add(extras / name, source)
+                elif installed != source:
+                    raise ValueError('A matching patched LYX host module is required: %s; '
+                                     'review --with-lyx or compare manually' % name)
+        add(extras / 'driver_monitor.py', regular(ROOT / 'backend/driver_monitor.py'))
+
+    if web:
+        if not getattr(args, 'fluidd', None):
+            raise ValueError('--fluidd is required for fluidd or all components')
+        fluidd = Path(args.fluidd).expanduser().resolve(strict=True)
+        index = fluidd / 'index.html'
+        before_index = regular(index)
+        config = target_config(getattr(args, 'hostname', None),
+                               getattr(args, 'origin', None) or [],
+                               getattr(args, 'api_url', None))
+        paths['fluidd'] = str(fluidd)
+        assets = make_assets(config)
+        version = digest(b''.join(name.encode() + assets[name] for name in sorted(assets)))[:16]
+        asset_dir = 'driver-monitor-' + version
+        for name, data in assets.items():
+            destination = fluidd / asset_dir / name
+            if destination.parent.is_symlink():
+                raise ValueError('Refusing symlink asset directory')
+            add(destination, data)
+        # Switch the web entry only after every asset is in place.
+        add(index, patch_index(before_index, asset_dir))
+    return {'components': components, 'drivers': drivers, 'paths': paths,
+            'config': config, 'asset_dir': asset_dir, 'changes': changes}
 
 
 def atomic_write(path, data, metadata=None):
@@ -179,7 +209,9 @@ def check_current(item, expected):
 def apply_plan(plan, backup_root):
     changes = plan['changes']
     if not changes:
-        return {'status': 'unchanged', 'files': 0}
+        return {'status': 'unchanged', 'files': 0,
+                'components': plan.get('components', 'all'),
+                'drivers': plan.get('drivers', 'lyx'), 'paths': plan.get('paths')}
     for item in changes:
         check_current(item, None if item['before'] is None else digest(item['before']))
     backup_root = Path(backup_root).expanduser().resolve()
@@ -197,6 +229,9 @@ def apply_plan(plan, backup_root):
                         'after_sha256': digest(item['after']), 'backup_file': '%03d.before' % i,
                         'metadata': metadata, 'written': False})
     receipt = {'format': 1, 'status': 'installing', 'asset_dir': plan['asset_dir'],
+               'components': plan.get('components', 'all'),
+               'drivers': plan.get('drivers', 'lyx'), 'paths': plan.get('paths'),
+               'target': plan.get('config'),
                'service_restarted': False, 'firmware_flashed': False, 'files': records}
     state_file = backup / 'receipt.json'
 
@@ -219,7 +254,9 @@ def apply_plan(plan, backup_root):
     finally:
         save()
         print('Backup and rollback receipt: %s' % state_file)
-    return {'status': 'installed', 'files': len(records), 'receipt': str(state_file)}
+    return {'status': 'installed', 'files': len(records), 'receipt': str(state_file),
+            'components': receipt['components'], 'drivers': receipt['drivers'],
+            'paths': receipt['paths']}
 
 
 def rollback(receipt_path, apply=False):
@@ -268,10 +305,14 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     for command in ('plan', 'install'):
         p = sub.add_parser(command)
-        p.add_argument('--klipper', required=True, help='Klipper checkout root')
-        p.add_argument('--fluidd', required=True, help='Actual Fluidd webroot')
-        p.add_argument('--hostname', required=True, help='Exact /printer/info hostname')
-        p.add_argument('--origin', action='append', required=True, help='Allowed Fluidd page origin, repeatable')
+        p.add_argument('--components', choices=('all', 'backend', 'fluidd'), default='all',
+                       help='Components to install (default: all)')
+        p.add_argument('--drivers', choices=('lyx', 'tmc'), default='lyx',
+                       help='LYX host dependency checks, or existing TMC modules (default: lyx)')
+        p.add_argument('--klipper', help='Klipper checkout root; required for backend/all')
+        p.add_argument('--fluidd', help='Actual Fluidd webroot; required for fluidd/all')
+        p.add_argument('--hostname', help='Exact /printer/info hostname; required for fluidd/all')
+        p.add_argument('--origin', action='append', help='Allowed Fluidd page origin; required for fluidd/all, repeatable')
         p.add_argument('--api-url', action='append', help='Exact API URL saved in Fluidd, repeatable; defaults to origin')
         p.add_argument('--with-lyx', action='store_true', help='Also install reviewed matching LYX host modules')
         p.add_argument('--backup-dir', default=str(ROOT / '.install-backups'))
@@ -285,6 +326,8 @@ def main():
         else:
             plan = build_plan(args)
             result = {'status': 'plan', 'target': plan['config'], 'asset_dir': plan['asset_dir'],
+                      'components': plan['components'], 'drivers': plan['drivers'],
+                      'paths': plan['paths'],
                       'files': [{'path': str(x['path']), 'action': 'create' if x['before'] is None else 'replace'}
                                 for x in plan['changes']]}
             if args.command == 'install':

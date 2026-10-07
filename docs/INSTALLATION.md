@@ -1,6 +1,54 @@
 # 安装、升级与卸载
 
-本文在 **运行 Klipper 和 Fluidd 的 Linux 主机**上操作。安装器支持路径和目标身份配置，不通过 SSH 控制其他机器。不要在自己的电脑上把桌面目录误认为打印机的 Klipper 或网页目录。
+本文在 **运行 Klipper 后台或托管 Fluidd 网页的 Linux 主机**上操作。安装器不限定 MCU 型号，支持只安装所需组件，不通过 SSH 控制其他机器。源码路径和网页路径都应指向本机实际服务使用的目录。
+
+## 0. 通用交互入口
+
+先按下一节下载当前交付分支，再在仓库根目录运行：
+
+```bash
+bash install.sh
+# 或只看计划，结束后不安装：
+bash install.sh --plan
+```
+
+需要 Bash、Python 3.8+ 及交互终端。向导选择安装内容，包含后台时再选择驱动依赖；它列出本机常见 Klipper／Fluidd 路径供确认，多候选由你选择，也支持自定义目录。只有选了 Fluidd 才需要填写主机身份和页面／API 地址。计划展示后，只有明确输入 `yes` 才执行安装；`--plan` 不进入写入步骤。没有交互终端时，使用下面的直接命令，不向向导盲目管道输入答案。
+
+| 选择 | 参数 | 需要的信息 | 安装结果 |
+| --- | --- | --- | --- |
+| 后台 + Fluidd | `--components all` | Klipper、Fluidd 路径及页面目标身份 | 后台模块与网页卡片 |
+| 仅后台 | `--components backend` | Klipper 路径 | 后台模块，供已有或其他前端使用 |
+| 仅 Fluidd | `--components fluidd` | Fluidd 路径及页面目标身份 | 网页卡片；LYX 监测需已有后台，纯 TMC 可直接用现有缓存 |
+
+驱动依赖用 `--drivers lyx`（默认，可同时有 TMC）或 `--drivers tmc`（纯 TMC）选择。`tmc` 表示安装器不检查、不安装 LYX 三模块，**不是运行时筛选器**：后台仍会发现机器上已配置的 LYX，网页仍会展示已有 LYX／TMC；它不会删除配置或屏蔽这些驱动。TMC 保持 Klipper 原有缓存与保护机制。`--with-lyx` 仅用于安装后台时补齐配套 LYX 主机模块，不能与“仅 Fluidd”或“纯 TMC”组合。
+
+交互向导选择 LYX 时会带上 `--with-lyx`，安装匹配的三份模块；已有匹配文件不重复更改，未知修改仍会被拒绝。仅前端不询问驱动依赖，也不检查这些主机文件。
+
+安装工具只写本地文件并创建备份，不联网、不修改 CFG、不重启或刷固件。向导不代替加载与验收：安装后台后执行第 4–6 节；仅更新网页时刷新页面即可，无须为此重启 Klipper。卡片适用范围仍是 Fluidd 同源网站根路径；未提供 Mainsail 卡片、子路径或跨域 API 支持。
+
+### 直接命令：按需安装
+
+`install.sh` 的 `plan`、`install`、`rollback` 子命令直接调用原 `scripts/install.py`，可以在没有交互终端时使用。下面以普通用户目录举例；FLYOS 可将 Klipper 路径替换为核实后的 `/data/klipper`，Fluidd 替换为 `/data/fluidd`。备份应放在网页目录之外。这里展示 `plan`；核对输出后将同一条命令中的 `plan` 改为 `install` 才实际写入，权限不足时仅给必要的操作加 `sudo`。
+
+```bash
+# 仅后台、纯 TMC：不需要 Fluidd 目录或页面身份。
+bash install.sh plan --components backend --drivers tmc \
+  --klipper "$HOME/klipper" --backup-dir "$PWD/.install-backups"
+
+# 仅后台、LYX（可同时有 TMC）：安装配套三份 LYX 模块。
+bash install.sh plan --components backend --drivers lyx --with-lyx \
+  --klipper "$HOME/klipper" --backup-dir "$PWD/.install-backups"
+
+# 仅 Fluidd：先将下面的占位替换为实际目标；不需要 --klipper。
+bash install.sh plan --components fluidd \
+  --fluidd "$HOME/fluidd" --hostname REPLACE_WITH_PRINTER_INFO_HOSTNAME \
+  --origin 'http://fluidd.example' --api-url 'http://fluidd.example:7125' \
+  --backup-dir "$PWD/.install-backups"
+```
+
+`--origin` 和 `--api-url` 可重复指定已核实的入口。仅装 Fluidd 不会创建后台对象；LYX 数据需要已有的 `driver_monitor` 后台，纯 TMC 卡片可以直接使用现有 Klipper 缓存，不要求安装本仓库后台或添加 `[driver_monitor]`。
+
+下面第 1–6 节保留 **后台 + Fluidd、LYX 配套**的完整手动示例，默认参数等价于 `--components all --drivers lyx`。纯 TMC 的完整安装在这些参数中增加 `--drivers tmc` 并保持 `LYX_ARGS=()`；只装后台或只装网页可沿用上面的精简命令，分别跳过不适用的路径、服务或配置步骤。
 
 ## 1. 确认前提与目录
 
@@ -23,9 +71,9 @@ git branch --show-current
 git status --short
 ```
 
-先按[依赖说明](DEPENDENCIES.md)确认匹配的 LYX 主机模块与 MCU 命令。已经稳定通信的机器不需要为安装监测卡片再次刷固件。
+使用 LYX 时，先按[依赖说明](DEPENDENCIES.md)确认匹配的主机模块与 MCU 命令；纯 TMC 无此 LYX 前提。已经稳定通信的机器不需要为安装监测卡片再次刷固件。
 
-需要构建 C8P 的 USB 或 USB 转 CAN 1M 固件时，先按[C8P 构建手册](C8P_FIRMWARE.md)选择与运行主机相匹配的源码。构建脚本不安装这里的 Python 模块；本节的 `--with-lyx` 只安装主机三模块，两者分别执行、分别验收。FLYOS 优先将本机 `/data/klipper` 作为构建输入，保留厂商接口；不要仅为新增 LYX 替换整个厂商 Klipper。
+固件继续使用自己主板对应的 Klipper 编译流程。仓库另保留[C8P 可选构建工具](C8P_FIRMWARE.md)，不是通用监测安装的必经步骤；安装器不会调用它，也不会改动固件。
 
 | 项目 | 常见目录示例 | FLYOS 已验证布局示例 |
 | --- | --- | --- |
@@ -134,7 +182,7 @@ LYX_ARGS=()  # 已安装本仓库匹配的修补版 LYX 时保持为空。
 
 `plan` 只读取与输出将创建／替换的文件，不创建备份、不写设备文件。需要允许域名或 HTTPS 入口时，再重复 `--origin` 与对应 `--api-url`；对应入口必须实际代理到相同主机。页面请求始终使用自己的同源 `/printer`，不会自动改连 `--api-url`。
 
-默认要求已安装的三份 LYX 文件与 `vendor/lyx/PROVENANCE.json` 的修补版哈希一致。若要同时安装本仓库配套 LYX 主机模块，先执行下面的可选块；它只安装主机 Python 文件，不安装 MCU 固件。
+安装后台且选择默认 `--drivers lyx` 时，要求已安装的三份 LYX 文件与 `vendor/lyx/PROVENANCE.json` 的修补版哈希一致。若要同时安装本仓库配套 LYX 主机模块，先执行下面的可选块；它只安装主机 Python 文件，不安装 MCU 固件。纯 TMC 不执行此块。
 
 ```bash
 # 可选：仅在已核实需安装或更新这三份 LYX 主机模块时执行。

@@ -1,5 +1,19 @@
 # 驱动、UART 与 MCU 依赖
 
+## 通用安装与驱动依赖
+
+监测安装不绑定 C8P、H723 或某一种上位机。`install.sh` 在已有 Klipper 的 Linux 环境中安装选定组件；它需要 Bash 和 Python 3.8+。直接安装器可选择后台、Fluidd 或两者，路径按本机填写。其他网页前端可只安装后台；本仓库未提供它们的卡片。
+
+| 使用方式 | 主机与 MCU 前提 |
+| --- | --- |
+| 纯 TMC，`--drivers tmc` | 已有可工作的 Klipper TMC 配置；不依赖 LYX 模块或 Modbus UART 固件 |
+| LYX，可同时使用 TMC，`--drivers lyx` | 匹配的 LYX 主机模块和支持其 Modbus UART 命令的 MCU 固件 |
+| 仅 Fluidd，`--components fluidd` | 已工作的同源 Moonraker 接口；LYX 监测需后台已安装并加载 |
+
+纯 TMC 的卡片可只安装 Fluidd 组件，直接使用已有 Klipper 缓存，不要求 `driver_monitor` 后台。`--drivers` 是安装依赖选项，不是驱动显示或后台采集的过滤器；已有 LYX 配置不会因选择 `tmc` 而被屏蔽。
+
+Klipper 原有 `make menuconfig`／`make` 流程仍按各主板使用，监测安装不会修改它。C8P 两个构建入口是此前提供的可选工具，不是对其他 MCU 的限制。安装可配置路径也不等于所有 Klipper、Fluidd 或厂商版本已经实测。
+
 ## 三个独立部分
 
 ```mermaid
@@ -12,7 +26,7 @@ flowchart LR
   API --> WEB[Fluidd 卡片]
 ```
 
-监测模块不会给普通 MCU 固件添加 `config_modbus_uart`、`modbus_uart_send`、`modbus_uart_response`。已有兼容固件和成功的原生读取是安装监测器之前的条件。
+对于 LYX，监测模块不会给普通 MCU 固件添加 `config_modbus_uart`、`modbus_uart_send`、`modbus_uart_response`。已有兼容固件和成功的原生读取是启用 LYX 监测的前提；纯 TMC 安装不需要这些命令。
 
 ## 固定来源
 

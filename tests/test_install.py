@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -187,6 +188,202 @@ class InstallerTest(unittest.TestCase):
         (receipt_path.parent / old_index['backup_file']).write_bytes(b'tampered')
         with self.assertRaises(ValueError):
             installer.rollback(receipt_path, apply=True)
+
+    def select_components(self, components, drivers='lyx'):
+        self.args.components = components
+        self.args.drivers = drivers
+        if components == 'backend':
+            self.args.fluidd = None
+            self.args.hostname = None
+            self.args.origin = None
+            self.args.api_url = None
+        elif components == 'fluidd':
+            self.args.klipper = None
+
+    def test_backend_only_without_web_identity_is_idempotent_and_reversible(self):
+        self.select_components('backend')
+        plan = installer.build_plan(self.args)
+        self.assertEqual([self.extras.resolve() / 'driver_monitor.py'],
+                         [change['path'] for change in plan['changes']])
+        result = self.install(plan)
+        self.assertEqual(1, result['files'])
+        self.assertEqual([], installer.build_plan(self.args)['changes'])
+        self.assertEqual(self.original, self.index.read_bytes())
+        installer.rollback(result['receipt'], apply=True)
+        self.assertFalse((self.extras / 'driver_monitor.py').exists())
+        self.assertEqual(self.original, self.index.read_bytes())
+
+    def test_backend_only_can_explicitly_install_missing_lyx_modules(self):
+        self.select_components('backend')
+        self.args.with_lyx = True
+        for name in installer.LYX_FILES:
+            (self.extras / name).unlink()
+        result = self.install()
+        self.assertEqual(4, result['files'])
+        self.assertEqual(self.original, self.index.read_bytes())
+        installer.rollback(result['receipt'], apply=True)
+        for name in ('driver_monitor.py',) + installer.LYX_FILES:
+            self.assertFalse((self.extras / name).exists())
+
+    def test_fluidd_only_never_reads_backend_or_lyx_and_rolls_back_exactly(self):
+        self.select_components('fluidd')
+        real_regular = installer.regular
+        def only_web_files(path, optional=False):
+            path = Path(path)
+            self.assertNotIn(path.name, installer.LYX_FILES)
+            self.assertNotEqual('PROVENANCE.json', path.name)
+            self.assertNotEqual('driver_monitor.py', path.name)
+            return real_regular(path, optional)
+        with patch.object(installer, 'regular', side_effect=only_web_files):
+            plan = installer.build_plan(self.args)
+            self.assertEqual(5, len(plan['changes']))
+            self.assertTrue(all(self.fluidd.resolve() in change['path'].parents
+                                for change in plan['changes']))
+            result = self.install(plan)
+            self.assertEqual([], installer.build_plan(self.args)['changes'])
+            installer.rollback(result['receipt'], apply=True)
+        self.assertEqual(self.original, self.index.read_bytes())
+        self.assertFalse((self.extras / 'driver_monitor.py').exists())
+
+    def test_tmc_install_ignores_unknown_missing_and_symlinked_lyx_files(self):
+        self.select_components('all', 'tmc')
+        unknown = self.extras / 'lyx.py'
+        unknown.write_text('# preserve local unknown LYX implementation\n')
+        linked = self.extras / 'lyx_uart.py'
+        linked.unlink()
+        linked.symlink_to(unknown)
+        absent = self.extras / 'lyx9231.py'
+        absent.unlink()
+        real_regular = installer.regular
+        def no_lyx_reads(path, optional=False):
+            self.assertNotIn(Path(path).name, installer.LYX_FILES)
+            self.assertNotEqual('PROVENANCE.json', Path(path).name)
+            return real_regular(path, optional)
+        with patch.object(installer, 'regular', side_effect=no_lyx_reads):
+            result = self.install()
+            self.assertEqual(6, result['files'])
+            self.assertEqual([], installer.build_plan(self.args)['changes'])
+            installer.rollback(result['receipt'], apply=True)
+        self.assertEqual('# preserve local unknown LYX implementation\n', unknown.read_text())
+        self.assertTrue(linked.is_symlink())
+        self.assertEqual(str(unknown), os.readlink(linked))
+        self.assertFalse(absent.exists())
+        self.assertFalse((self.extras / 'driver_monitor.py').exists())
+        self.assertEqual(self.original, self.index.read_bytes())
+
+    def test_tmc_backend_only_does_not_require_lyx_modules(self):
+        self.select_components('backend', 'tmc')
+        for name in installer.LYX_FILES:
+            (self.extras / name).unlink()
+        result = self.install()
+        self.assertEqual(1, result['files'])
+        self.assertEqual([], installer.build_plan(self.args)['changes'])
+        installer.rollback(result['receipt'], apply=True)
+        self.assertFalse((self.extras / 'driver_monitor.py').exists())
+
+    def test_invalid_component_or_driver_selection_is_rejected_without_writes(self):
+        for components, drivers in (('mainsail', 'lyx'), ('all', 'unknown'),
+                                    ('', 'lyx'), ('backend', '')):
+            with self.subTest(components=components, drivers=drivers):
+                self.args.components = components
+                self.args.drivers = drivers
+                with self.assertRaises(ValueError):
+                    installer.build_plan(self.args)
+        self.assertFalse(self.backups.exists())
+        self.assertFalse((self.extras / 'driver_monitor.py').exists())
+        self.assertEqual(self.original, self.index.read_bytes())
+
+    def test_incompatible_lyx_options_are_rejected_before_install(self):
+        self.args.with_lyx = True
+        for components, drivers in (('all', 'tmc'), ('backend', 'tmc'),
+                                    ('fluidd', 'lyx'), ('fluidd', 'tmc')):
+            with self.subTest(components=components, drivers=drivers):
+                self.args.components = components
+                self.args.drivers = drivers
+                with self.assertRaises(ValueError):
+                    installer.build_plan(self.args)
+        self.assertFalse(self.backups.exists())
+        self.assertEqual(self.original, self.index.read_bytes())
+
+    def test_backend_lyx_validation_failure_does_not_change_web(self):
+        self.select_components('backend')
+        (self.extras / 'lyx.py').write_text('# unknown local change\n')
+        with self.assertRaises(ValueError):
+            self.install()
+        self.assertFalse(self.backups.exists())
+        self.assertFalse((self.extras / 'driver_monitor.py').exists())
+        self.assertEqual(self.original, self.index.read_bytes())
+
+    def test_fluidd_validation_failure_does_not_change_existing_backend(self):
+        self.select_components('fluidd')
+        backend = self.extras / 'driver_monitor.py'
+        backend.write_text('# preserve existing backend\n')
+        self.index.write_text('<html>no body end</html>')
+        with self.assertRaises(ValueError):
+            self.install()
+        self.assertFalse(self.backups.exists())
+        self.assertEqual('# preserve existing backend\n', backend.read_text())
+
+    def test_backend_rollback_does_not_undo_separately_installed_web(self):
+        self.select_components('backend')
+        backend_result = self.install()
+        self.args.components = 'fluidd'
+        self.args.fluidd = str(self.fluidd)
+        self.args.hostname = 'printer-demo'
+        self.args.origin = ['http://192.0.2.10']
+        self.args.api_url = None
+        web_result = self.install()
+        installed_index = self.index.read_bytes()
+        installer.rollback(backend_result['receipt'], apply=True)
+        self.assertFalse((self.extras / 'driver_monitor.py').exists())
+        self.assertEqual(installed_index, self.index.read_bytes())
+        installer.rollback(web_result['receipt'], apply=True)
+        self.assertEqual(self.original, self.index.read_bytes())
+
+    def test_fluidd_rollback_does_not_undo_separately_installed_backend(self):
+        self.select_components('fluidd')
+        web_result = self.install()
+        self.args.components = 'backend'
+        self.args.klipper = str(self.klipper)
+        backend_result = self.install()
+        backend = self.extras / 'driver_monitor.py'
+        installed_backend = backend.read_bytes()
+        installer.rollback(web_result['receipt'], apply=True)
+        self.assertEqual(self.original, self.index.read_bytes())
+        self.assertEqual(installed_backend, backend.read_bytes())
+        installer.rollback(backend_result['receipt'], apply=True)
+        self.assertFalse(backend.exists())
+
+    def test_component_specific_cli_accepts_only_its_required_paths(self):
+        cases = [
+            ['--components', 'backend', '--drivers', 'tmc', '--klipper', str(self.klipper)],
+            ['--components', 'fluidd', '--fluidd', str(self.fluidd),
+             '--hostname', 'printer-demo', '--origin', 'http://192.0.2.10'],
+        ]
+        for options in cases:
+            with self.subTest(options=options), \
+                    patch.object(sys, 'argv', ['install.py', 'plan'] + options), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                installer.main()
+        self.assertFalse(self.backups.exists())
+        self.assertFalse((self.extras / 'driver_monitor.py').exists())
+        self.assertEqual(self.original, self.index.read_bytes())
+
+    def test_component_specific_cli_rejects_missing_required_target(self):
+        cases = [
+            ['--components', 'backend'],
+            ['--components', 'fluidd', '--hostname', 'printer-demo', '--origin', 'http://192.0.2.10'],
+            ['--components', 'fluidd', '--fluidd', str(self.fluidd), '--origin', 'http://192.0.2.10'],
+            ['--components', 'fluidd', '--fluidd', str(self.fluidd), '--hostname', 'printer-demo'],
+        ]
+        for options in cases:
+            with self.subTest(options=options), \
+                    patch.object(sys, 'argv', ['install.py', 'plan'] + options), \
+                    contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exc:
+                installer.main()
+            self.assertEqual(2, exc.exception.code)
+        self.assertFalse(self.backups.exists())
 
 
 if __name__ == '__main__':
