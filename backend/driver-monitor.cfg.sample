@@ -1,0 +1,16 @@
+# Load only after installing driver_monitor.py into klippy/extras.
+# References existing [lyx9231 ...] sections; creates no UART or MCU objects.
+# Loading this configuration requires a Klipper restart. Existing LYX driver
+# initialization still writes its configured registers during that restart.
+[driver_monitor]
+auto_start: true
+# Optional host protection (default false for existing installations).
+# A fresh valid nonzero alarm read entirely within an enabled motor cycle
+# shuts down Klipper. Requires auto_start:true and disallows AUTO ENABLE=0.
+# Invalid replies / communication failures are not driver alarm codes.
+# Driver alarms require driver power cycling; Klipper restart does not clear them.
+shutdown_on_alarm: false
+# Delay after completing alarm -> speed -> angle, before the next full cycle.
+cycle_interval: 1
+# Idle time after each monitor read, before starting the next register.
+read_gap: 0.2

@@ -1,0 +1,45 @@
+--- a/src/modbus_uart.c
++++ b/src/modbus_uart.c
+@@ -44,6 +44,7 @@
+     uint8_t rx_bit_count;       // Total sampled data bits received
+     uint8_t data[16];           // Shared tx/rx data buffer (max 16 bytes)
+     uint16_t sync_counter;      // Timeout counter for rx sync detection
++    uint16_t sync_limit;        // Poll count preserving the rx sync window
+ };
+ /****************************************************************
+  * Forward function prototypes
+@@ -123,12 +124,16 @@
+         return SF_RESCHEDULE;
+     }
+     m->sync_counter++;
+-    // Terminate receive if sync timeout reached (300 bit periods)
+-    if (m->sync_counter >= 300) {
+-        DBG_PRINT("sync timeout after %d bits", m->sync_counter);
++    // Keep the original first-poll-to-timeout span (299 bit periods).
++    if (m->sync_counter >= m->sync_limit) {
++        DBG_PRINT("sync timeout after %d polls", m->sync_counter);
+         return modbus_uart_finalize(m);
+     }
+-    m->timer.waketime += m->bit_time;
++    // Bound start-edge detection delay to a quarter bit (at least one tick).
++    uint32_t poll_time = m->bit_time / 4;
++    if (!poll_time)
++        poll_time = 1;
++    m->timer.waketime += poll_time;
+     return SF_RESCHEDULE;
+ }
+ /****************************************************************
+@@ -238,6 +243,13 @@
+     m->rx_pin = gpio_in_setup(rx_pin, !!pull_up);
+     m->tx_pin = gpio_out_setup(tx_pin, 1);
+     m->bit_time = args[4];
++    uint32_t poll_time = m->bit_time / 4;
++    if (!poll_time)
++        poll_time = 1;
++    // ceil(299 * bit_time / poll_time) + 1, without overflowing 32 bits.
++    // The first poll is immediate, so only sync_limit - 1 intervals elapse.
++    m->sync_limit = 299 * (m->bit_time / poll_time)
++        + (299 * (m->bit_time % poll_time) + poll_time - 1) / poll_time + 1;
+     m->flags = (MU_LINE_HIGH | (pull_up ? MU_PULLUP : 0)
+                 | (rx_pin == tx_pin ? MU_SINGLE_WIRE : 0));
+     DBG_PRINT("config: oid=%d rx=%u tx=%u pullup=%d bit_time=%u",

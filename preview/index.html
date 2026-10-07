@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN" data-driver-monitor-preview="true"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fluidd 驱动监测卡片 · 离线预览</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#121212;color:#eee;font:14px Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}header{height:64px;background:#272727;display:flex;align-items:center;padding:0 26px;gap:20px}header strong{font-size:20px;font-weight:500}header span{margin-left:auto;color:#ffcc80;font-size:13px}.sidebar{position:fixed;left:0;top:64px;bottom:0;width:62px;border-right:1px solid #333;background:#202020;display:flex;align-items:center;flex-direction:column;gap:30px;padding-top:24px;color:#aaa}.sidebar b{color:#68b5fa}main{margin-left:62px;padding:22px;max-width:1500px}.row{display:grid;grid-template-columns:1fr 1fr;gap:22px}.card{background:#1e1e1e;border-radius:6px;box-shadow:0 2px 5px #0004;margin-bottom:20px;overflow:hidden}.card h2{margin:0;padding:15px 18px;font-size:17px;font-weight:500;border-bottom:1px solid #303030}.content{padding:18px;color:#aaa}.coords{display:flex;justify-content:space-around;padding:20px 0 30px;color:#ddd}.motions{display:flex;justify-content:space-around;margin:0 0 20px}.motions span{border:1px solid #424242;padding:12px 18px;border-radius:3px;color:#bdbdbd}.line{display:flex;justify-content:space-between;border-bottom:1px solid #333;padding:10px 0}.console{height:180px;font:13px ui-monospace,monospace;color:#aaa}.console small{color:#71b7f5}.preview-tools{margin:14px 0;color:#aaa;display:flex;gap:12px;align-items:center;font-size:12px}select{background:#303030;color:#eee;border:1px solid #505050;padding:7px;border-radius:4px}#fixture-state{color:#888}[data-driver-monitor-slot]{margin-bottom:20px}@media(max-width:720px){.row{grid-template-columns:1fr}main{margin-left:0;padding:12px}.sidebar{display:none}header{padding:0 14px}header span{font-size:11px}}
+</style></head><body>
+<header><strong>driver-monitor-demo</strong><span>离线布局预览 · 模拟数据 · 未部署</span></header>
+<aside class="sidebar"><b>▦</b><span>⌘</span><span>☷</span><span>⚙</span></aside>
+<main><div class="row"><div class="col-md-6 col-lg-6 col-12">
+<section class="card"><h2>移动控制</h2><div class="content"><div class="coords"><span>X [ 0.00 ]</span><span>Y [ 0.00 ]</span><span>Z [ 0.000 ]</span></div><div class="motions"><span>←</span><span>⌂</span><span>→</span></div><div class="line"><span>移动速度</span><span>100 %</span></div><div class="line"><span>挤出流量</span><span>100 %</span></div></div></section>
+<section class="card"><h2>打印机限制</h2><div class="content"><div class="line"><span>速度</span><span>600 mm/s</span></div><div class="line"><span>加速度</span><span>5000 mm/s²</span></div></div></section>
+</div><div class="col-md-6 col-lg-6 col-12">
+<div data-driver-monitor-slot></div>
+<section class="card"><h2>控制台</h2><div class="content console"><small>离线预览，不连接打印机。</small><p>驱动监测与其他模块位于同一仪表板。</p></div></section>
+</div></div>
+<div class="preview-tools"><label for="scenario">模拟回复</label><select id="scenario"><option value="invalid">无有效回复</option><option value="ok">正常回复</option><option value="alarm">报警码 2</option><option value="trend">动态曲线演示（模拟）</option><option value="missing">后端未安装</option><option value="offline">连接中断</option></select><span id="fixture-state">只用于离线验证</span></div></main>
+<script>fetch('/__test').then(r=>r.json()).then(d=>{document.querySelector('#scenario').value=d.scenario;});document.querySelector('#scenario').addEventListener('change',async e=>{await fetch('/__scenario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:e.target.value})});document.querySelector('#fixture-state').textContent='模拟条件已切换';});</script>
+<script type="module" src="/frontend/driver-monitor.mjs"></script>
+</body></html>
