@@ -35,10 +35,10 @@ LYX9231 驱动的后台采集、使能后报警停机和 Fluidd 内嵌监测卡�
 
 ## 安装入口
 
-安装工具使用 Python 标准库，不联网、不改 `printer.cfg`、不重启服务、不运动、不刷 MCU。先克隆仓库并按安装章节确认路径及目标：
+安装工具使用 Python 标准库，不联网、不改 `printer.cfg`、不重启服务、不运动、不刷 MCU。当前交付在 `feat/initial-distribution`，尚未合入 `main`；先下载该分支，再按安装章节选择普通 Linux 或 FLYOS 命令并确认路径及目标：
 
 ```sh
-git clone https://github.com/zhangmumu903-web/klipper-driver-monitor.git
+git clone --branch feat/initial-distribution --single-branch https://github.com/zhangmumu903-web/klipper-driver-monitor.git
 cd klipper-driver-monitor
 python3 scripts/install.py --help
 ```
