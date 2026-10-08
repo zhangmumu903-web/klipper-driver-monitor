@@ -36,6 +36,8 @@ bash install.sh plan --help
 
 | 章节 | 内容 |
 | --- | --- |
+| [大型机器四 Z 示范案例](docs/examples/LARGE_MACHINE_Z.md) | 四 Z 独立 UART、带注释 CFG、安装与读回、全轴 LYX 卡片和报警预期 |
+| [Wiki 首页源稿](wiki/Home.md)／[筹备说明](wiki/README.md) | 已准备导航与章节规划；GitHub Wiki 尚未发布 |
 | [安装、升级与卸载](docs/INSTALLATION.md) | 路径、目标身份、预览改动、备份安装、配置加载、验收、回退 |
 | [驱动与 MCU 依赖](docs/DEPENDENCIES.md) | 作者仓库来源、本项目修补、MCU 固件前提、单线 UART 边界 |
 | [C8P 固件构建](docs/C8P_FIRMWARE.md) | 普通 Linux／FLYOS、USB／USB 转 CAN 1M、隔离源码、产物与配套主机安装 |
@@ -75,13 +77,14 @@ Python 3.8+ 用于安装／预览工具，Node.js 18+ 用于前端测试；监�
 ## 目录
 
 ```text
-backend/        Klipper 扩展、样例配置与 60 项后端测试
+backend/        Klipper 扩展、样例配置与后端测试
 frontend/       无构建依赖的卡片、显示控制器及目标配置
 vendor/lyx/     固定来源的三份修补版主机模块及哈希
 firmware/       固定来源的 r3 UART 补丁与构建材料，不含通用固件
 scripts/        本机安装工具、C8P USB／USB-CAN 隔离构建脚本
 install.sh      通用交互安装入口
 config/         带注释的驱动 CFG 模板
+wiki/           Wiki 首页、导航源稿与章节规划
 preview/        不连接打印机的模拟服务器
 tests/          安装与恢复测试
 docs/           中文手册

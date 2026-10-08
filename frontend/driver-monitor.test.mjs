@@ -526,6 +526,31 @@ test('unknown, excluded TMC and removed cards never fall back to a different LYX
   assert.equal(r.controller.state.messageKey, null);
 });
 
+test('four Z motors, X/Y and extruders retain independent LYX card refresh targets', async () => {
+  const r = rig();
+  const names = ['stepper_x', 'stepper_y', 'stepper_z', 'stepper_z1',
+    'stepper_z2', 'stepper_z3', 'extruder', 'extruder1'];
+  r.monitor.drivers = names.map(stepper => ({stepper, type: 'lyx9231',
+    registers: Object.keys(REGISTER_INFO)}));
+  r.data.objects.push('tmc2209 stepper_x1');
+  r.monitor.drivers.push({stepper: 'stepper_x1', type: 'tmc2209'});
+  for (const [index, name] of names.entries())
+    for (const register of DYNAMIC_REGISTERS) r.update(register, 100 + index, 'ok', name);
+  await r.open();
+  assert.deepEqual(r.controller.state.drivers.map(d => d.key), names.map(n => `lyx:${n}`));
+  assert.deepEqual(r.posts, []);
+  for (const name of names) {
+    const before = structuredClone(r.monitor.readings);
+    assert.equal(await r.controller.refreshDriver(`lyx:${name}`), true);
+    assert.equal(r.posts.at(-1), `DRIVER_MONITOR_REFRESH STEPPER=${name}`);
+    assert.equal(r.controller.state.messageKey, `lyx:${name}`);
+    for (const other of names.filter(n => n !== name))
+      assert.deepEqual(r.monitor.readings[other], before[other]);
+    assert.equal(r.monitor.readings[name].ALARM_CODE.value, 0);
+  }
+  assert.equal(r.posts.length, names.length);
+});
+
 test('one pending card action locks all other card refreshes and the global AUTO control', async () => {
   const r = rig(); addSecondDriver(r); await r.open();
   const normal = r.api.refreshDriver; let release;

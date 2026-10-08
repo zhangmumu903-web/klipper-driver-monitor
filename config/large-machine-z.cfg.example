@@ -1,0 +1,100 @@
+# 大型机器四 Z 的 LYX 配置示范，不是完整 printer.cfg，也不是实机配置。
+# 先读 docs/examples/LARGE_MACHINE_Z.md；不要 include 尚含占位符的本文件。
+# 已有 stepper_z / stepper_z1 / stepper_z2 / stepper_z3 运动节必须完整保留。
+# 本例假定四轴均 microsteps: 16、full_steps_per_rotation: 200。
+# 四颗驱动各用独立 UART 引脚，模块已设置为 38400、地址 1。
+# 按模块替换所有 <..._UART_PIN>，核对电阻、电流、模式及 EN 极性。
+# 1.0 A 仅说明格式，不是大型 Z 电机的推荐电流；0.050 Ω 也须按模块核实。
+# 同名节已有时编辑原节，不重复添加。不要改写机械行程、归零或调平配置。
+# Klipper 停机不是 Z 抱闸/防坠控制，需先核实失能后的机械保持措施。
+
+[lyx9231 stepper_z]
+uart_pin: <Z_UART_PIN>
+# 不同总线才可以同为地址 1；本例不表示共享线上的地址可重复。
+uart_address: 1
+sense_resistor: 0.050
+run_current: 1.0
+hold_current: 0.5
+# 与对应运动节 microsteps 一致。
+microstep: 16
+# 1 对应 200 整步；400 整步应为 2，并与实际运动节匹配。
+driver_motor_type: 1
+# 代码接受 0/1/2；按模块实际支持的模式选择。
+driver_op_mode: 2
+# 本例关闭半流，hold_current 不证明电机已进入该保持电流。
+driver_half_cur_en: 0
+# 寄存器单位，不直接解释为毫秒。
+driver_half_cur_time: 3000
+driver_boost_level: 1
+driver_noise_en: 0
+
+[lyx9231 stepper_z1]
+uart_pin: <Z1_UART_PIN>
+# 不同总线才可以同为地址 1；本例不表示共享线上的地址可重复。
+uart_address: 1
+sense_resistor: 0.050
+run_current: 1.0
+hold_current: 0.5
+# 与对应运动节 microsteps 一致。
+microstep: 16
+# 1 对应 200 整步；400 整步应为 2，并与实际运动节匹配。
+driver_motor_type: 1
+# 代码接受 0/1/2；按模块实际支持的模式选择。
+driver_op_mode: 2
+# 本例关闭半流，hold_current 不证明电机已进入该保持电流。
+driver_half_cur_en: 0
+# 寄存器单位，不直接解释为毫秒。
+driver_half_cur_time: 3000
+driver_boost_level: 1
+driver_noise_en: 0
+
+[lyx9231 stepper_z2]
+uart_pin: <Z2_UART_PIN>
+# 不同总线才可以同为地址 1；本例不表示共享线上的地址可重复。
+uart_address: 1
+sense_resistor: 0.050
+run_current: 1.0
+hold_current: 0.5
+# 与对应运动节 microsteps 一致。
+microstep: 16
+# 1 对应 200 整步；400 整步应为 2，并与实际运动节匹配。
+driver_motor_type: 1
+# 代码接受 0/1/2；按模块实际支持的模式选择。
+driver_op_mode: 2
+# 本例关闭半流，hold_current 不证明电机已进入该保持电流。
+driver_half_cur_en: 0
+# 寄存器单位，不直接解释为毫秒。
+driver_half_cur_time: 3000
+driver_boost_level: 1
+driver_noise_en: 0
+
+[lyx9231 stepper_z3]
+uart_pin: <Z3_UART_PIN>
+# 不同总线才可以同为地址 1；本例不表示共享线上的地址可重复。
+uart_address: 1
+sense_resistor: 0.050
+run_current: 1.0
+hold_current: 0.5
+# 与对应运动节 microsteps 一致。
+microstep: 16
+# 1 对应 200 整步；400 整步应为 2，并与实际运动节匹配。
+driver_motor_type: 1
+# 代码接受 0/1/2；按模块实际支持的模式选择。
+driver_op_mode: 2
+# 本例关闭半流，hold_current 不证明电机已进入该保持电流。
+driver_half_cur_en: 0
+# 寄存器单位，不直接解释为毫秒。
+driver_half_cur_time: 3000
+driver_boost_level: 1
+driver_noise_en: 0
+
+# 所有 LYX 驱动共用一个监测节，包括以后添加的 X/Y/挤出机。
+[driver_monitor]
+auto_start: true
+# 本例主动开启，软件默认 false；同使能周期内的新有效非零报警停整个 Klipper。
+# 核实通信、EN 极性、使能状态及 Z 失能后的机械保持措施后再应用。
+shutdown_on_alarm: true
+# 所有驱动一轮结束后等待，不保证每秒完成一轮。
+cycle_interval: 1
+# 相邻完整查询间隔；不改变原生内部重试间隔。
+read_gap: 0.2

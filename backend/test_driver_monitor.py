@@ -343,6 +343,48 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(self.uart.mutex.acquisitions, 2)  # Native + monitor.
         self.assertFalse(self.uart.mutex.locked)
 
+    def test_four_z_xy_and_extruders_all_sample_and_guard_their_own_axis(self):
+        names = ('stepper_x', 'stepper_y', 'stepper_z', 'stepper_z1',
+                 'stepper_z2', 'stepper_z3', 'extruder', 'extruder1')
+        for alarm_axis in names:
+            with self.subTest(alarm_axis=alarm_axis):
+                printer = FakePrinter()
+                reactor, uart = printer.reactor, printer.uart
+                enables = printer.objects['stepper_enable']
+                enables.status['steppers'] = {name: False for name in names}
+                enables.trackers = {
+                    name: FakeEnableTracking(enables, name, reactor)
+                    for name in names}
+                addresses = dict(zip(names, range(1, len(names) + 1)))
+                for name, address in addresses.items():
+                    printer.objects['lyx9231 ' + name] = FakeDriver(uart, address)
+                printer.objects['tmc2209 stepper_x1'] = FakeStatus()
+                uart.answer = {'data': 0}
+                monitor = module.load_config(FakeConfig(
+                    printer, shutdown_on_alarm=True))
+                printer.events['klippy:ready']()
+                reactor.fire()
+                status = monitor.get_status(reactor.now)
+                self.assertEqual([d['stepper'] for d in status['drivers']],
+                                 sorted(names))
+                self.assertEqual([(a, r) for a, r, t in uart.calls],
+                                 [(addresses[n], r) for n in sorted(names)
+                                  for r in (8, 14, 16, 3, 19)])
+                for name in names:
+                    self.assertEqual(len(status['readings'][name]), 5)
+                    self.assertFalse(status['protection'][name]['armed'])
+                self.assertEqual(printer.shutdown_messages, [])
+                enables.trackers[alarm_axis].set_enabled(True)
+                uart.answer = {'data': 5}
+                with self.assertRaisesRegex(CommandError, 'stopped'):
+                    monitor.cmd_DRIVER_MONITOR_READ(FakeCommand(
+                        stepper=alarm_axis, register='ALARM_CODE'))
+                self.assertEqual(len(printer.shutdown_messages), 1)
+                self.assertIn(alarm_axis, printer.shutdown_messages[0])
+                self.assertIn('堵转', printer.shutdown_messages[0])
+                self.assertEqual(uart.calls[-1][:2],
+                                 (addresses[alarm_axis], 8))
+
     def test_native_exhaustion_is_one_error_transaction_and_stops_batch(self):
         self.native_driver()
         self.ready()
