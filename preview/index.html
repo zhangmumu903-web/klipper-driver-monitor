@@ -13,7 +13,7 @@
 <div data-driver-monitor-slot></div>
 <section class="card"><h2>控制台</h2><div class="content console"><small>离线预览，不连接打印机。</small><p>驱动监测与其他模块位于同一仪表板。</p></div></section>
 </div></div>
-<div class="preview-tools"><label for="scenario">模拟回复</label><select id="scenario"><option value="invalid">无有效回复</option><option value="ok">正常回复</option><option value="alarm">报警码 2</option><option value="trend">动态曲线演示（模拟）</option><option value="missing">后端未安装</option><option value="offline">连接中断</option></select><span id="fixture-state">只用于离线验证</span></div></main>
+<div class="preview-tools"><label for="scenario">模拟回复</label><select id="scenario"><option value="invalid">无有效回复</option><option value="ok">正常回复</option><option value="alarm">报警码 2</option><option value="trend">动态曲线演示（模拟）</option><option value="multiple">混合配置（2 LYX＋2 TMC，仅显示 LYX）</option><option value="tmc_only">仅 TMC（验证无 LYX 空状态）</option><option value="missing">后端未安装</option><option value="offline">连接中断</option></select><span id="fixture-state">只用于离线验证</span></div></main>
 <script>fetch('/__test').then(r=>r.json()).then(d=>{document.querySelector('#scenario').value=d.scenario;});document.querySelector('#scenario').addEventListener('change',async e=>{await fetch('/__scenario',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:e.target.value})});document.querySelector('#fixture-state').textContent='模拟条件已切换';});</script>
 <script type="module" src="/frontend/driver-monitor.mjs"></script>
 </body></html>

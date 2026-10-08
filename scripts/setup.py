@@ -91,11 +91,8 @@ def collect_options(input_fn=None, output=None):
                               with_lyx=False, klipper=None, fluidd=None, hostname=None,
                               origin=None, api_url=None, backup_dir=str(ROOT / '.install-backups'))
     if components != 'fluidd':
-        output('1. LYX9231（可共用 TMC；安装配套 LYX 主机模块）  2. 纯 TMC（不检查或修改 LYX 文件）')
-        output('此选择只决定安装依赖；不会修改现有驱动 CFG 或限制后台发现的驱动。')
-        args.drivers = choose_value('驱动依赖 [1]：', {'1': 'lyx', '2': 'tmc'},
-                                   '1', input_fn, output)
-        args.with_lyx = args.drivers == 'lyx'
+        output('安装 LYX9231 监测与配套主机模块；页面仅显示 LYX，现有 TMC 配置不变。')
+        args.with_lyx = True
         args.klipper = choose_path('klipper', discover_paths('klipper'), input_fn, output)
         if args.with_lyx:
             output('LYX 仍需要已有兼容 MCU 固件；此安装不会生成或刷写固件。')
@@ -139,10 +136,8 @@ def run_setup(plan_only=False, input_fn=None, output=None):
     output(json.dumps(result, ensure_ascii=False, indent=2))
     output('文件安装完成；未修改 CFG、重启服务或刷写 MCU。')
     if args.components != 'fluidd':
-        if args.drivers == 'lyx':
-            output('LYX 后台首次使用：按 docs/INSTALLATION.md 添加一次 [driver_monitor]；已有配置不重复添加。')
-        else:
-            output('纯 TMC 卡片使用 Klipper 原有缓存，无需新增 [driver_monitor]；已有 LYX 配置保持原样。')
+        output('LYX 后台首次使用：按 docs/INSTALLATION.md 添加一次 [driver_monitor]；已有配置不重复添加。')
+        output('需要使能后报警停机时，在 CFG 显式设置 shutdown_on_alarm: true；默认 false。')
         output('主机代码需按本机服务管理方式重新加载；FLYOS 先检查是否绑定自动刷写动作。')
     else:
         output('刷新 Fluidd 页面查看；LYX 数据仍要求对应主机已经安装并加载后台。')

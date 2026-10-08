@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {MonitorController, MoonrakerApi, ApiError, PREVIEW_HOSTNAME,
   REGISTER_INFO, DYNAMIC_REGISTERS, targetProblem as checkTargetProblem, buildRefreshCommand, buildAutoCommand,
-  driversFrom, readingDisplay, resultTime, tmcCacheRows, trendData,
+  driversFrom, readingDisplay, resultTime, trendData,
   monitorScheduleLabel, alarmProtectionDisplay, alarmShutdownMessage} from './driver-monitor-core.mjs';
 import {isDashboardLocation} from './driver-monitor.mjs';
 import {TARGET_CONFIG} from './driver-monitor-config.mjs';
@@ -287,15 +287,60 @@ test('static readings older than 24 hours retain their sample time across later 
   assert.equal(resultTime({ended: 101}, {eventtime: 100}, 1700000000000).wallTime, null);
 });
 
-test('TMC remains cache-only and drv_status replacement removes prior flags', async () => {
-  const r = rig(); r.data.objects.push('tmc2209 stepper_y'); await r.open();
-  assert.equal(driversFrom(r.data).find(driver => driver.type === 'tmc2209').mode, 'cached');
-  r.controller.chooseDriver('tmc2209 stepper_y'); await r.controller.refreshDriver();
+test('TMC-only configurations have no cards or driver actions, with or without the backend', async () => {
+  const r = rig();
+  r.monitor.drivers = [];
+  r.data.objects.push('tmc2209 extruder', 'tmc5160 stepper_z');
+  r.data.status['tmc2209 extruder'] = {run_current: 1.5, drv_status: {otpw: true}};
+  await r.open();
+  assert.deepEqual(driversFrom(r.data), []);
+  assert.deepEqual(r.controller.state.drivers, []);
+  assert.equal(r.controller.state.selectedKey, '');
+  assert.match(r.controller.actionProblem('auto'), /尚未发现可监测的 LYX/);
+  assert.equal(await r.controller.refreshDriver('tmc2209 extruder'), false);
+  assert.equal(await r.controller.setAuto(true), false);
+  delete r.data.status.driver_monitor;
+  r.data.objects = r.data.objects.filter(name => name !== 'driver_monitor');
+  await r.controller.refresh();
+  assert.deepEqual(r.controller.state.drivers, []);
   assert.equal(r.posts.length, 0);
-  const cached = {run_current: 1.5, drv_status: {otpw: true}};
-  assert.deepEqual(tmcCacheRows(cached).slice(-1), [['过温预警', '是']]);
-  cached.drv_status = {otpw: false}; assert.deepEqual(tmcCacheRows(cached).slice(-1), [['过温预警', '否']]);
-  cached.drv_status = {}; assert.equal(tmcCacheRows(cached).some(([label]) => label === '过温预警'), false);
+});
+
+test('mixed backend entries keep distinct valid LYX cards and ignore TMC and duplicates', () => {
+  const data = snapshot();
+  data.objects.push('tmc2209 extruder');
+  data.status.driver_monitor.drivers.push(
+    {stepper: 'stepper_y', type: 'lyx9231'},
+    {stepper: 'stepper_x', type: 'lyx9231'},
+    {stepper: 'extruder', type: 'tmc2209'},
+    {stepper: 'bad\nM112', type: 'lyx9231'});
+  assert.deepEqual(driversFrom(data).map(driver => driver.key), ['lyx:stepper_x', 'lyx:stepper_y']);
+});
+
+test('snapshot queries never request TMC status for mixed or TMC-only printers', async () => {
+  for (const hasMonitor of [true, false]) {
+    const data = snapshot(), calls = [];
+    data.objects.push('tmc2209 extruder', 'tmc5160 stepper_z');
+    if (!hasMonitor) data.objects = data.objects.filter(name => name !== 'driver_monitor');
+    const api = new MoonrakerApi(async (path, options) => {
+      calls.push({path, options});
+      let result;
+      if (path === '/printer/info') result = data.info;
+      else if (path === '/printer/objects/list') result = {objects: data.objects};
+      else {
+        const names = [...new URL(path, 'http://localhost').searchParams.keys()];
+        assert.deepEqual(names, hasMonitor ? ['webhooks', 'driver_monitor'] : ['webhooks']);
+        result = {eventtime: data.eventtime,
+          status: Object.fromEntries(names.map(name => [name, data.status[name]]))};
+      }
+      return {ok: true, status: 200, json: async () => ({result})};
+    });
+    const result = await api.snapshot();
+    assert.equal(calls.length, 3);
+    assert.ok(calls.every(call => call.options.method === 'GET'));
+    assert.ok(calls.every(call => !/tmc/i.test(call.path)));
+    assert.equal(driversFrom(result).length, hasMonitor ? 1 : 0);
+  }
 });
 
 test('command builders reject injections and non-boolean auto settings', () => {
@@ -445,10 +490,10 @@ function addSecondDriver(r) {
   r.data.status['tmc2209 extruder'] = {run_current: .8, drv_status: {otpw: true}};
 }
 
-test('all discovered drivers share cache refreshes without automatic POSTs or changing auto state', async () => {
+test('mixed configurations show only LYX cards and share passive cache refreshes', async () => {
   const r = rig(); addSecondDriver(r); await r.open();
   assert.deepEqual(r.controller.state.drivers.map(driver => driver.key),
-    ['lyx:stepper_x', 'lyx:stepper_y', 'tmc2209 extruder']);
+    ['lyx:stepper_x', 'lyx:stepper_y']);
   await r.controller.refresh(); await r.controller.refresh();
   assert.equal(r.queries, 3); assert.equal(r.posts.length, 0); assert.equal(r.monitor.auto_enabled, true);
 });
@@ -467,7 +512,7 @@ test('explicit card refresh changes only that driver and binds its notice withou
   assert.match(r.controller.state.message, /三项状态已刷新/);
 });
 
-test('unknown, cached and removed cards never fall back to a different LYX driver', async () => {
+test('unknown, excluded TMC and removed cards never fall back to a different LYX driver', async () => {
   const r = rig(); addSecondDriver(r); await r.open();
   for (const key of ['lyx:missing', 'tmc2209 extruder'])
     assert.equal(await r.controller.refreshDriver(key), false);

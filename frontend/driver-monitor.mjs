@@ -1,6 +1,6 @@
 import {TARGET_CONFIG} from './driver-monitor-config.mjs';
 import {MonitorController, MoonrakerApi, PREVIEW_HOSTNAME,
-  DYNAMIC_REGISTERS, readingDisplay, targetProblem, tmcCacheRows, trendData,
+  DYNAMIC_REGISTERS, readingDisplay, targetProblem, trendData,
   monitorScheduleLabel, alarmProtectionDisplay, alarmShutdownMessage} from './driver-monitor-core.mjs';
 
 const el = (tag, className, text) => {
@@ -98,20 +98,8 @@ function createDriverCard(driver, onRefresh) {
   card.setAttribute('aria-label', `${driver.stepper} 驱动监测`);
   const header = el('header', 'dm-header');
   header.append(el('h3', '', driver.stepper),
-    el('span', 'dm-mode', `${driver.type.toUpperCase()}${driver.mode === 'cached' ? ' · 缓存' : ''}`));
+    el('span', 'dm-mode', driver.type.toUpperCase()));
   card.append(header);
-  if (driver.mode === 'cached') {
-    const note = el('p', 'dm-cache-note');
-    const fields = el('dl', 'dm-tmc-values');
-    card.append(note, fields);
-    return {element: card, render(state, controller, targetError) {
-      note.textContent = `Klipper 缓存 · ${clockText(state.receivedAt)} · 非现场读取`;
-      fields.replaceChildren();
-      for (const [label, value] of tmcCacheRows(state.connected && !targetError
-        ? state.snapshot?.status?.[driver.object] : null))
-        fields.append(el('dt', '', label), el('dd', '', value));
-    }};
-  }
   const read = button('立即刷新', 'dm-primary'); read.dataset.action = 'refresh';
   read.addEventListener('click', () => onRefresh(driver.key)); header.append(read);
   const protection = el('p', 'dm-protection'); protection.hidden = true;
@@ -202,7 +190,7 @@ export function mountDriverMonitor(targetElement) {
   shutdownReason.setAttribute('role', 'alert');
   toolbar.append(header, preview, protectionNote, shutdownReason, message);
   const collection = el('div', 'dm-cards');
-  const empty = el('p', 'dm-empty', '尚未发现驱动');
+  const empty = el('p', 'dm-empty', '尚未发现 LYX 驱动，请检查 LYX 配置及 [driver_monitor] 是否已加载。');
   shadow.append(sheet, toolbar, collection, empty); targetElement.append(host);
 
   const cards = new Map();
@@ -255,7 +243,7 @@ export function mountDriverMonitor(targetElement) {
     shutdownReason.textContent = shutdownText; shutdownReason.hidden = !shutdownText;
     const backgroundState = hasLyx ? (monitor?.auto_enabled
       ? monitorScheduleLabel(monitor) : `后台监测已暂停 · ${monitorScheduleLabel(monitor)}`)
-      : state.drivers.length ? 'TMC 仅显示缓存，不触发现场读取。' : '尚未发现驱动。';
+      : '尚未发现可监测的 LYX 驱动。';
     message.dataset.tone = state.messageKey === null ? state.tone : 'neutral';
     message.textContent = (state.messageKey === null ? state.message : '') || backgroundState;
     if (targetError) message.textContent = targetError;

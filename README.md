@@ -1,8 +1,8 @@
 # Klipper Driver Monitor
 
-Klipper 驱动监测扩展：LYX9231 后台采集、使能后报警停机，以及 Fluidd 每驱动独立卡片。TMC 卡片展示 Klipper 已有缓存；网页关闭后，LYX 采集与保护继续由 Klipper 运行。
+Klipper 驱动监测扩展：LYX9231 后台采集、使能后报警停机，以及 Fluidd 每个 LYX 驱动一张独立卡片。网页关闭后，采集与保护继续由 Klipper 运行。
 
-本项目由已在 FLY C8 Pro 上使用的实现整理而来。LYX 主动读取报警、转速和角度误差；TMC 卡片展示 Klipper 已有缓存。它不是原厂调参上位机的完整替代品，也不是官方 Klipper／Fluidd 插件。
+本项目由已在 FLY C8 Pro 上使用的实现整理而来。LYX 主动读取报警、转速和角度误差；本组件不查询或显示 TMC 状态，机器原有 TMC 运动控制、固件支持及保护机制保持不变。它不是原厂调参上位机的完整替代品，也不是官方 Klipper／Fluidd 插件。
 
 ## 通用安装
 
@@ -14,7 +14,7 @@ cd klipper-driver-monitor
 bash install.sh
 ```
 
-向导先选择“后台 + Fluidd／仅后台／仅 Fluidd”；安装后台时再选择“LYX（可同时使用 TMC）／纯 TMC”。它列出本机常见路径供确认，也可填写自定义目录；多个候选不会自动替你决定。计划展示后，输入明确的 `yes` 才写文件并备份。
+向导选择“后台 + Fluidd／仅后台／仅 Fluidd”，统一用于 LYX 监测，不再提供纯 TMC 选项。它列出本机常见路径供确认，也可填写自定义目录；多个候选不会自动替你决定。计划展示后，输入明确的 `yes` 才写文件并备份。
 
 ```sh
 # 只生成安装计划；不执行安装。
@@ -23,7 +23,7 @@ bash install.sh --plan
 bash install.sh plan --help
 ```
 
-下载仓库需要网络；安装工具本身不联网、不改 CFG、不重启服务、不刷 MCU。文件安装后，按[安装手册](docs/INSTALLATION.md)加载后台配置和检查页面。纯 TMC 安装不要求 LYX 模块；使用其他前端时可只装后台，本仓库的卡片仅支持 Fluidd 的同源网站根路径部署。
+下载仓库需要网络；安装工具本身不联网、不改 CFG、不重启服务、不刷 MCU。文件安装后，按[安装手册](docs/INSTALLATION.md)加载后台配置和检查页面。使用其他前端时可只装后台，本仓库的卡片仅支持 Fluidd 的同源网站根路径部署。
 
 ## 先读这里
 
@@ -50,7 +50,7 @@ bash install.sh plan --help
 - 后台逐驱动串行读取 `ALARM_CODE → MOTOR_SPEED → ERROR_ANGLE`，每项等完整事务结束再读下一项。
 - 型号、电流设定启动尝试一次；动态历史在内存保留最多 10 分钟／每系列 600 点。
 - 可选 `shutdown_on_alarm:true`：同一已生效的逻辑使能周期内读到有效非零报警，调用 Klipper shutdown，并记录中文原因。保护开启时不能暂停采集。
-- Fluidd 每个已配置 LYX/TMC 一张卡片；速度／角度误差各一张最近 5 分钟曲线，失败断线、不补零。
+- Fluidd 每个已配置并被后台发现的 LYX 一张卡片；速度／角度误差各一张最近 5 分钟曲线，失败断线、不补零。TMC 不显示，也不进入本组件状态查询。
 - 网页只定时读取缓存；打开更多浏览器不会新增更多 UART 自动采集器。
 - 电流、细分、运行模式放 CFG。转速／误差当前显示寄存器原值，电流设定不是实测相电流。
 
@@ -58,7 +58,7 @@ bash install.sh plan --help
 
 ## 安装选项
 
-直接命令支持 `--components all|backend|fluidd` 和 `--drivers lyx|tmc`，默认分别为 `all` 和 `lyx`。`--drivers` 只选择安装依赖，不隐藏运行时已有驱动。安装器保留 `plan`、`install`、`rollback`；只有 `--with-lyx` 才会安装配套三份 LYX 主机模块，并拒绝覆盖未知修改。只装后台不要求网页路径／地址；只装 Fluidd 不要求 Klipper 源码路径，也不会安装 LYX 模块。纯 TMC 可只装 Fluidd，使用现有缓存，无须新增后台配置。完整命令示例见[安装手册](docs/INSTALLATION.md)。
+直接命令支持 `--components all|backend|fluidd`，默认 `all`；`--drivers lyx` 为默认值，保留显式写法。新的 `plan/install --drivers tmc` 会明确拒绝，旧版安装收据仍可回滚。安装器保留 `plan`、`install`、`rollback`；直接命令只有加上 `--with-lyx` 才会安装配套三份 LYX 主机模块，交互向导安装后台时自动包含它，并拒绝覆盖未知修改。只装后台不要求网页路径／地址；只装 Fluidd 不要求 Klipper 源码路径，也不会安装 LYX 模块，但显示数据仍需要已加载的 LYX 后台。完整命令示例见[安装手册](docs/INSTALLATION.md)。
 
 ## 开发与离线预览
 

@@ -73,7 +73,6 @@ export function buildAutoCommand(enabled) {
 }
 
 export function driversFrom(snapshot) {
-  const names = snapshot.objects || [];
   const monitor = snapshot.status?.driver_monitor;
   const entries = Array.isArray(monitor?.drivers) ? monitor.drivers : [];
   const drivers = [];
@@ -84,13 +83,6 @@ export function driversFrom(snapshot) {
       type: 'lyx9231', mode: 'active',
       registers: Object.keys(REGISTER_INFO).filter(r => item.registers?.includes(r))});
   }
-  // TMC get_status values are cached. This never calls DUMP_TMC or a register read.
-  for (const name of names) {
-    const match = /^(tmc\d{4}) ([A-Za-z0-9_]+)$/.exec(name);
-    if (!match) continue;
-    drivers.push({key: name, object: name, type: match[1], stepper: match[2],
-      mode: 'cached', registers: []});
-  }
   return drivers;
 }
 
@@ -98,23 +90,6 @@ export function rawValue(result) {
   if (result?.outcome !== 'ok' || !Number.isInteger(result.value)
       || result.value < 0 || result.value > 65535) return '无有效数值';
   return `${result.value}  ·  0x${result.value.toString(16).padStart(4, '0').toUpperCase()}`;
-}
-
-export function tmcCacheRows(data) {
-  if (!data || typeof data !== 'object') return [['状态', '未提供缓存']];
-  const rows = [
-    ['运行电流设定', Number.isFinite(data.run_current) ? `${data.run_current.toFixed(3)} A` : '未提供'],
-    ['保持电流设定', Number.isFinite(data.hold_current) ? `${data.hold_current.toFixed(3)} A` : '未提供'],
-  ];
-  if (Number.isFinite(data.temperature)) rows.push(['温度（缓存）', `${data.temperature.toFixed(1)} °C`]);
-  const flags = data.drv_status;
-  if (flags && typeof flags === 'object' && Object.keys(flags).length) {
-    const labels = {ot: '过温', otpw: '过温预警', s2ga: 'A 相对地短路', s2gb: 'B 相对地短路',
-      s2vsa: 'A 相对电源短路', s2vsb: 'B 相对电源短路', ola: 'A 相开路', olb: 'B 相开路'};
-    for (const [key, value] of Object.entries(flags).slice(0, 16))
-      rows.push([labels[key] || key, typeof value === 'boolean' ? (value ? '是' : '否') : String(value)]);
-  } else rows.push(['驱动报警字段', '未提供；不能据此判断无报警']);
-  return rows;
 }
 
 export function resultTime(result, snapshot, receivedAt) {
@@ -168,7 +143,6 @@ export class MoonrakerApi {
     const objects = listing.objects;
     const wanted = ['webhooks', 'driver_monitor']
       .filter(n => objects.includes(n));
-    wanted.push(...objects.filter(n => /^tmc\d{4} [A-Za-z0-9_]+$/.test(n)));
     if (!wanted.length) throw new ApiError('未发现可查询的 Klipper 状态对象。');
     const query = await this.request('/printer/objects/query?'
       + wanted.map(encodeURIComponent).join('&'));
@@ -327,7 +301,7 @@ export class MonitorController {
     } else {
       const driver = s.drivers.find(item => item.key === key);
       if (!driver) return '驱动已移除或不在允许范围内。';
-      if (driver.mode !== 'active') return '当前为 TMC 缓存模式。';
+      if (driver.mode !== 'active') return '驱动不支持现场读取。';
     }
     if (kind === 'refresh' && (monitor.active === true || monitor.cycle_active === true))
       return '后台正在读取，请等本轮完成。';

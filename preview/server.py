@@ -110,12 +110,13 @@ def seed_trend(stepper='stepper_x'):
 
 def set_scenario(data):
     scenario = data.get('scenario', state['scenario'])
-    if scenario not in ('invalid', 'ok', 'alarm', 'trend', 'missing', 'offline', 'multiple'):
+    if scenario not in ('invalid', 'ok', 'alarm', 'trend', 'missing', 'offline', 'multiple', 'tmc_only'):
         raise ValueError('Unknown offline scenario')
-    steppers = data.get('lyx_steppers', ['stepper_x', 'stepper_y']
-                        if scenario == 'multiple' else ['stepper_x'])
+    default_steppers = ([] if scenario == 'tmc_only' else
+                        ['stepper_x', 'stepper_y'] if scenario == 'multiple' else ['stepper_x'])
+    steppers = data.get('lyx_steppers', default_steppers)
     tmcs = data.get('tmc_objects', list(TMC_CACHES)
-                    if scenario == 'multiple' else ['tmc2209 extruder'])
+                    if scenario in ('multiple', 'tmc_only') else ['tmc2209 extruder'])
     outcomes = data.get('driver_outcomes', {})
     if (not isinstance(steppers, list) or not isinstance(tmcs, list)
             or any(s not in PROFILES for s in steppers)

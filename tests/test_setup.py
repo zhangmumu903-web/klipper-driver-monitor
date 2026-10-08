@@ -3,6 +3,7 @@ import argparse
 import contextlib
 import importlib.util
 import io
+import shutil
 from pathlib import Path
 import tempfile
 import unittest
@@ -22,6 +23,8 @@ class SetupTest(unittest.TestCase):
         self.klipper = self.base / 'custom source with spaces'
         self.extras = self.klipper / 'klippy/extras'
         self.extras.mkdir(parents=True)
+        for name in setup.installer.LYX_FILES:
+            shutil.copy2(ROOT / 'vendor/lyx' / name, self.extras / name)
         self.fluidd = self.base / 'custom web with spaces'
         self.fluidd.mkdir()
         self.index = self.fluidd / 'index.html'
@@ -31,7 +34,7 @@ class SetupTest(unittest.TestCase):
         self.messages = []
         self.prompts = []
         self.options = argparse.Namespace(
-            command='install', components='all', drivers='tmc', with_lyx=False,
+            command='install', components='all', drivers='lyx', with_lyx=False,
             klipper=str(self.klipper), fluidd=str(self.fluidd),
             hostname='printer-demo', origin=['http://printer.example'],
             api_url=None, backup_dir=str(self.backups))
@@ -111,14 +114,14 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(str(self.fluidd.resolve()), result)
         self.assertEqual(2, len(self.prompts))
 
-    def test_backend_tmc_options_do_not_request_web_identity(self):
+    def test_backend_lyx_options_do_not_request_web_identity(self):
         with patch.object(setup, 'discover_paths', return_value=[]) as discover:
             options = setup.collect_options(
-                self.answers(['2', '2', str(self.klipper), str(self.backups)]),
+                self.answers(['2', str(self.klipper), str(self.backups)]),
                 self.messages.append)
         self.assertEqual('backend', options.components)
-        self.assertEqual('tmc', options.drivers)
-        self.assertFalse(options.with_lyx)
+        self.assertEqual('lyx', options.drivers)
+        self.assertTrue(options.with_lyx)
         self.assertIsNone(options.fluidd)
         self.assertIsNone(options.hostname)
         self.assertIsNone(options.origin)
@@ -130,10 +133,12 @@ class SetupTest(unittest.TestCase):
     def test_backend_lyx_selection_explicitly_requests_matching_modules(self):
         with patch.object(setup, 'discover_paths', return_value=[]):
             options = setup.collect_options(
-                self.answers(['2', '1', str(self.klipper), '']), self.messages.append)
+                self.answers(['2', str(self.klipper), '']), self.messages.append)
         self.assertTrue(options.with_lyx)
         self.assertEqual('lyx', options.drivers)
         self.assertTrue(any('不会生成或刷写固件' in line for line in self.messages))
+        self.assertFalse(any('驱动依赖' in prompt for prompt in self.prompts))
+        self.assertTrue(any('仅显示 LYX' in line for line in self.messages))
 
     def test_fluidd_only_options_do_not_discover_klipper_or_install_lyx(self):
         with patch.object(setup, 'discover_paths', return_value=[]) as discover, \

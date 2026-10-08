@@ -12,17 +12,17 @@ bash install.sh
 bash install.sh --plan
 ```
 
-需要 Bash、Python 3.8+ 及交互终端。向导选择安装内容，包含后台时再选择驱动依赖；它列出本机常见 Klipper／Fluidd 路径供确认，多候选由你选择，也支持自定义目录。只有选了 Fluidd 才需要填写主机身份和页面／API 地址。计划展示后，只有明确输入 `yes` 才执行安装；`--plan` 不进入写入步骤。没有交互终端时，使用下面的直接命令，不向向导盲目管道输入答案。
+需要 Bash、Python 3.8+ 及交互终端。向导选择安装内容，统一安装 LYX 监测；它列出本机常见 Klipper／Fluidd 路径供确认，多候选由你选择，也支持自定义目录。只有选了 Fluidd 才需要填写主机身份和页面／API 地址。计划展示后，只有明确输入 `yes` 才执行安装；`--plan` 不进入写入步骤。没有交互终端时，使用下面的直接命令，不向向导盲目管道输入答案。
 
 | 选择 | 参数 | 需要的信息 | 安装结果 |
 | --- | --- | --- | --- |
 | 后台 + Fluidd | `--components all` | Klipper、Fluidd 路径及页面目标身份 | 后台模块与网页卡片 |
 | 仅后台 | `--components backend` | Klipper 路径 | 后台模块，供已有或其他前端使用 |
-| 仅 Fluidd | `--components fluidd` | Fluidd 路径及页面目标身份 | 网页卡片；LYX 监测需已有后台，纯 TMC 可直接用现有缓存 |
+| 仅 Fluidd | `--components fluidd` | Fluidd 路径及页面目标身份 | LYX 网页卡片；对应 Klipper 需已有监测后台 |
 
-驱动依赖用 `--drivers lyx`（默认，可同时有 TMC）或 `--drivers tmc`（纯 TMC）选择。`tmc` 表示安装器不检查、不安装 LYX 三模块，**不是运行时筛选器**：后台仍会发现机器上已配置的 LYX，网页仍会展示已有 LYX／TMC；它不会删除配置或屏蔽这些驱动。TMC 保持 Klipper 原有缓存与保护机制。`--with-lyx` 仅用于安装后台时补齐配套 LYX 主机模块，不能与“仅 Fluidd”或“纯 TMC”组合。
+本版只显示 LYX，交互向导已移除纯 TMC 选项。直接命令的 `--drivers lyx` 保留为默认值；新的 `plan/install --drivers tmc` 明确拒绝，避免安装一个不会显示目标驱动的组件。机器可同时使用 TMC，但本组件不查询或展示其状态，也不修改原有 TMC 运动和保护。`--with-lyx` 仅用于安装后台时补齐配套 LYX 主机模块，不能与“仅 Fluidd”组合。
 
-交互向导选择 LYX 时会带上 `--with-lyx`，安装匹配的三份模块；已有匹配文件不重复更改，未知修改仍会被拒绝。仅前端不询问驱动依赖，也不检查这些主机文件。
+交互向导安装后台时会带上 `--with-lyx`，安装匹配的三份模块；已有匹配文件不重复更改，未知修改仍会被拒绝。仅前端不检查这些主机文件。旧版安装生成的收据仍按其原始记录回滚，不受新的 LYX 安装范围限制。
 
 安装工具只写本地文件并创建备份，不联网、不修改 CFG、不重启或刷固件。向导不代替加载与验收：安装后台后执行第 4–6 节；仅更新网页时刷新页面即可，无须为此重启 Klipper。卡片适用范围仍是 Fluidd 同源网站根路径；未提供 Mainsail 卡片、子路径或跨域 API 支持。
 
@@ -31,11 +31,7 @@ bash install.sh --plan
 `install.sh` 的 `plan`、`install`、`rollback` 子命令直接调用原 `scripts/install.py`，可以在没有交互终端时使用。下面以普通用户目录举例；FLYOS 可将 Klipper 路径替换为核实后的 `/data/klipper`，Fluidd 替换为 `/data/fluidd`。备份应放在网页目录之外。这里展示 `plan`；核对输出后将同一条命令中的 `plan` 改为 `install` 才实际写入，权限不足时仅给必要的操作加 `sudo`。
 
 ```bash
-# 仅后台、纯 TMC：不需要 Fluidd 目录或页面身份。
-bash install.sh plan --components backend --drivers tmc \
-  --klipper "$HOME/klipper" --backup-dir "$PWD/.install-backups"
-
-# 仅后台、LYX（可同时有 TMC）：安装配套三份 LYX 模块。
+# 仅 LYX 后台：安装配套三份模块，不需要 Fluidd 目录或页面身份。
 bash install.sh plan --components backend --drivers lyx --with-lyx \
   --klipper "$HOME/klipper" --backup-dir "$PWD/.install-backups"
 
@@ -46,9 +42,9 @@ bash install.sh plan --components fluidd \
   --backup-dir "$PWD/.install-backups"
 ```
 
-`--origin` 和 `--api-url` 可重复指定已核实的入口。仅装 Fluidd 不会创建后台对象；LYX 数据需要已有的 `driver_monitor` 后台，纯 TMC 卡片可以直接使用现有 Klipper 缓存，不要求安装本仓库后台或添加 `[driver_monitor]`。
+`--origin` 和 `--api-url` 可重复指定已核实的入口。仅装 Fluidd 不会创建后台对象；显示 LYX 数据需要已有并加载 `[driver_monitor]` 的对应后台。没有 LYX 的机器不会显示 TMC 卡片。
 
-下面第 1–6 节保留 **后台 + Fluidd、LYX 配套**的完整手动示例，默认参数等价于 `--components all --drivers lyx`。纯 TMC 的完整安装在这些参数中增加 `--drivers tmc` 并保持 `LYX_ARGS=()`；只装后台或只装网页可沿用上面的精简命令，分别跳过不适用的路径、服务或配置步骤。
+下面第 1–6 节保留 **后台 + Fluidd、LYX 配套**的完整手动示例，默认参数等价于 `--components all --drivers lyx`。只装后台或只装网页可沿用上面的精简命令，分别跳过不适用的路径、服务或配置步骤。
 
 ## 1. 确认前提与目录
 
@@ -71,7 +67,7 @@ git branch --show-current
 git status --short
 ```
 
-使用 LYX 时，先按[依赖说明](DEPENDENCIES.md)确认匹配的主机模块与 MCU 命令；纯 TMC 无此 LYX 前提。已经稳定通信的机器不需要为安装监测卡片再次刷固件。
+先按[依赖说明](DEPENDENCIES.md)确认匹配的 LYX 主机模块与 MCU 命令。已经稳定通信的机器不需要为安装监测卡片再次刷固件。
 
 固件继续使用自己主板对应的 Klipper 编译流程。仓库另保留[C8P 可选构建工具](C8P_FIRMWARE.md)，不是通用监测安装的必经步骤；安装器不会调用它，也不会改动固件。
 
@@ -182,7 +178,7 @@ LYX_ARGS=()  # 已安装本仓库匹配的修补版 LYX 时保持为空。
 
 `plan` 只读取与输出将创建／替换的文件，不创建备份、不写设备文件。需要允许域名或 HTTPS 入口时，再重复 `--origin` 与对应 `--api-url`；对应入口必须实际代理到相同主机。页面请求始终使用自己的同源 `/printer`，不会自动改连 `--api-url`。
 
-安装后台且选择默认 `--drivers lyx` 时，要求已安装的三份 LYX 文件与 `vendor/lyx/PROVENANCE.json` 的修补版哈希一致。若要同时安装本仓库配套 LYX 主机模块，先执行下面的可选块；它只安装主机 Python 文件，不安装 MCU 固件。纯 TMC 不执行此块。
+安装后台时，要求已安装的三份 LYX 文件与 `vendor/lyx/PROVENANCE.json` 的修补版哈希一致。若要同时安装本仓库配套 LYX 主机模块，先执行下面的可选块；它只安装主机 Python 文件，不安装 MCU 固件。
 
 ```bash
 # 可选：仅在已核实需安装或更新这三份 LYX 主机模块时执行。
@@ -362,7 +358,7 @@ curl --fail --silent --show-error "$PAGE_ORIGIN/printer/objects/query?driver_mon
 1. Klipper 恢复 ready，无配置／未知 MCU 命令错误。
 2. `/printer/objects/list` 存在 `driver_monitor`；`/printer/objects/query?driver_monitor` 能看到驱动列表与不断更新的采样。GET 只查缓存，不触发 UART。
 3. 如另行安排了通信验证，可在确认的目标轴执行一次 `DRIVER_MONITOR_READ STEPPER=stepper_x REGISTER=ALARM_CODE`，等待完整返回；这是主动 UART 读取，不属于上述只读 HTTP 验收，也不是安装必要步骤。不要用旧控制台输出判断本次成功。
-4. Fluidd 首页显示每个已配置驱动的独立卡片；LYX 三项各有采样时间，TMC 标明缓存。离开首页停止前端查询，后台继续。
+4. Fluidd 首页显示每个已配置并被后台发现的 LYX 的独立卡片；三项各有采样时间，TMC 不显示也不加入本组件状态查询。离开首页停止前端查询，后台继续。
 5. 开启保护时显示“使能后报警停机”，未使能待命，暂停按钮禁用。这只证明状态呈现；实际故障停机需另行安排具体的硬件验证。
 6. 用另一客户端打开同一已配置页面入口，检查来源／主机校验、读数和时间。切勿通过放开任意目标来绕过配置不匹配。
 

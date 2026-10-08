@@ -245,41 +245,50 @@ class InstallerTest(unittest.TestCase):
         self.assertEqual(self.original, self.index.read_bytes())
         self.assertFalse((self.extras / 'driver_monitor.py').exists())
 
-    def test_tmc_install_ignores_unknown_missing_and_symlinked_lyx_files(self):
-        self.select_components('all', 'tmc')
-        unknown = self.extras / 'lyx.py'
-        unknown.write_text('# preserve local unknown LYX implementation\n')
-        linked = self.extras / 'lyx_uart.py'
-        linked.unlink()
-        linked.symlink_to(unknown)
-        absent = self.extras / 'lyx9231.py'
-        absent.unlink()
-        real_regular = installer.regular
-        def no_lyx_reads(path, optional=False):
-            self.assertNotIn(Path(path).name, installer.LYX_FILES)
-            self.assertNotEqual('PROVENANCE.json', Path(path).name)
-            return real_regular(path, optional)
-        with patch.object(installer, 'regular', side_effect=no_lyx_reads):
-            result = self.install()
-            self.assertEqual(6, result['files'])
-            self.assertEqual([], installer.build_plan(self.args)['changes'])
-            installer.rollback(result['receipt'], apply=True)
-        self.assertEqual('# preserve local unknown LYX implementation\n', unknown.read_text())
-        self.assertTrue(linked.is_symlink())
-        self.assertEqual(str(unknown), os.readlink(linked))
-        self.assertFalse(absent.exists())
+    def test_tmc_install_is_rejected_before_reading_targets_or_creating_backups(self):
+        for components in ('all', 'backend', 'fluidd'):
+            with self.subTest(components=components):
+                self.args.components, self.args.drivers = components, 'tmc'
+                with patch.object(installer, 'regular', side_effect=AssertionError('target read')), \
+                        self.assertRaisesRegex(ValueError, 'TMC-only installation is no longer offered'):
+                    installer.build_plan(self.args)
+        self.assertFalse(self.backups.exists())
         self.assertFalse((self.extras / 'driver_monitor.py').exists())
         self.assertEqual(self.original, self.index.read_bytes())
 
-    def test_tmc_backend_only_does_not_require_lyx_modules(self):
-        self.select_components('backend', 'tmc')
+    def test_legacy_tmc_receipt_still_rolls_back_without_lyx_checks(self):
+        # A format-1 receipt from the previous TMC option remains usable.
+        previous = b'<html><body>previous web root</body></html>'
+        installed = b'<html><body>legacy installed card</body></html>'
+        self.index.write_bytes(installed)
+        self.backups.mkdir()
+        (self.backups / '000.before').write_bytes(previous)
+        receipt = self.backups / 'receipt.json'
+        receipt.write_text(json.dumps({
+            'format': 1, 'status': 'installed', 'drivers': 'tmc', 'components': 'fluidd',
+            'files': [{'path': str(self.index), 'written': True,
+                       'before_sha256': installer.digest(previous),
+                       'after_sha256': installer.digest(installed),
+                       'backup_file': '000.before', 'metadata': None}]}))
         for name in installer.LYX_FILES:
             (self.extras / name).unlink()
-        result = self.install()
-        self.assertEqual(1, result['files'])
-        self.assertEqual([], installer.build_plan(self.args)['changes'])
-        installer.rollback(result['receipt'], apply=True)
+        self.assertEqual(1, installer.rollback(receipt)['files'])
+        self.assertEqual(installed, self.index.read_bytes())
+        installer.rollback(receipt, apply=True)
+        self.assertEqual(previous, self.index.read_bytes())
+        self.assertEqual('rolled_back', json.loads(receipt.read_text())['status'])
         self.assertFalse((self.extras / 'driver_monitor.py').exists())
+
+    def test_legacy_tmc_cli_reports_reason_without_writes(self):
+        for command in ('plan', 'install'):
+            with self.subTest(command=command), \
+                    patch.object(sys, 'argv', ['install.py', command, '--drivers', 'tmc']), \
+                    contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as exc:
+                installer.main()
+            self.assertEqual(2, exc.exception.code)
+            self.assertIn('TMC-only installation is no longer offered', err.getvalue())
+        self.assertFalse(self.backups.exists())
+        self.assertEqual(self.original, self.index.read_bytes())
 
     def test_invalid_component_or_driver_selection_is_rejected_without_writes(self):
         for components, drivers in (('mainsail', 'lyx'), ('all', 'unknown'),
@@ -356,7 +365,7 @@ class InstallerTest(unittest.TestCase):
 
     def test_component_specific_cli_accepts_only_its_required_paths(self):
         cases = [
-            ['--components', 'backend', '--drivers', 'tmc', '--klipper', str(self.klipper)],
+            ['--components', 'backend', '--drivers', 'lyx', '--klipper', str(self.klipper)],
             ['--components', 'fluidd', '--fluidd', str(self.fluidd),
              '--hostname', 'printer-demo', '--origin', 'http://192.0.2.10'],
         ]

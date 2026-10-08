@@ -70,8 +70,4 @@ button:focus-visible, summary:focus-visible { outline: 2px solid #2196f3; outlin
   font-size: 11px; opacity: .5; pointer-events: none; }
 .dm-trend-tooltip { position: absolute; top: 0; right: 8px; padding: 3px 6px; border: 1px solid var(--dm-line);
   border-radius: 3px; background: var(--dm-surface, #1e1e1e); font-size: 10px; pointer-events: none; }
-.dm-cache-note { margin-top: 8px; font-size: 12px; opacity: .7; }
-.dm-tmc-values { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 8px 0; font-size: 12px; }
-.dm-tmc-values dt { opacity: .7; }
-.dm-tmc-values dd { margin: 0; text-align: right; }
 @media (max-width: 420px) { .dm-card, .dm-toolbar { padding: 12px; } .dm-reading { grid-template-columns: 91px minmax(30px, 1fr) auto; } }

@@ -110,10 +110,11 @@ def build_plan(args):
     with_lyx = getattr(args, 'with_lyx', False)
     if components not in ('all', 'backend', 'fluidd'):
         raise ValueError('Unsupported --components: %s' % components)
-    if drivers not in ('lyx', 'tmc'):
+    if drivers == 'tmc':
+        raise ValueError('TMC-only installation is no longer offered: this monitor displays LYX only. '
+                         'Existing TMC configurations are unchanged; old receipts still support rollback.')
+    if drivers != 'lyx':
         raise ValueError('Unsupported --drivers: %s' % drivers)
-    if with_lyx and drivers == 'tmc':
-        raise ValueError('--with-lyx cannot be combined with --drivers tmc')
     if with_lyx and components == 'fluidd':
         raise ValueError('--with-lyx requires backend or all components')
     backend = components in ('all', 'backend')
@@ -135,7 +136,7 @@ def build_plan(args):
         if not extras.is_dir() or extras.is_symlink():
             raise ValueError('Expected klippy/extras under --klipper')
         paths['klipper'] = str(klipper)
-        # TMC uses Klipper's existing modules. Do not inspect LYX files at all.
+        # Only LYX dependency validation belongs to this monitor.
         if drivers == 'lyx':
             provenance = json.loads(regular(ROOT / 'vendor/lyx/PROVENANCE.json'))
             for name in LYX_FILES:
@@ -308,7 +309,7 @@ def main():
         p.add_argument('--components', choices=('all', 'backend', 'fluidd'), default='all',
                        help='Components to install (default: all)')
         p.add_argument('--drivers', choices=('lyx', 'tmc'), default='lyx',
-                       help='LYX host dependency checks, or existing TMC modules (default: lyx)')
+                       help='LYX host dependencies (default: lyx); legacy tmc selection is rejected with migration guidance')
         p.add_argument('--klipper', help='Klipper checkout root; required for backend/all')
         p.add_argument('--fluidd', help='Actual Fluidd webroot; required for fluidd/all')
         p.add_argument('--hostname', help='Exact /printer/info hostname; required for fluidd/all')

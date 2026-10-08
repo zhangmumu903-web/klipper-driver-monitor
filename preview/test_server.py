@@ -50,6 +50,7 @@ class PreviewTests(unittest.TestCase):
         self.assertIn('tmc5160 stepper_z1', names)
         query = json.loads(self.read('/printer/objects/query?webhooks&driver_monitor')[0])['result']
         monitor = query['status']['driver_monitor']
+        self.assertEqual(set(query['status']), {'webhooks', 'driver_monitor'})
         self.assertEqual([item['stepper'] for item in monitor['drivers']], ['stepper_x', 'stepper_y'])
         self.assertEqual(monitor['readings']['stepper_y']['ALARM_CODE']['value'], 2)
         self.assertFalse(monitor['auto_enabled'])
@@ -57,6 +58,20 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(evidence['posts'], [])
         self.assertEqual(evidence['get_counts'], {
             '/printer/info': 1, '/printer/objects/list': 1, '/printer/objects/query': 1})
+
+    def test_tmc_only_fixture_retains_tmc_objects_and_has_no_lyx_drivers(self):
+        try:
+            server.set_scenario({'scenario': 'tmc_only', 'auto_enabled': False})
+            names = json.loads(self.read('/printer/objects/list')[0])['result']['objects']
+            self.assertIn('tmc2209 extruder', names)
+            self.assertIn('tmc5160 stepper_z1', names)
+            self.assertFalse(any(name.startswith('lyx9231 ') for name in names))
+            query = json.loads(self.read('/printer/objects/query?webhooks&driver_monitor')[0])['result']
+            self.assertEqual(set(query['status']), {'webhooks', 'driver_monitor'})
+            self.assertEqual(query['status']['driver_monitor']['drivers'], [])
+            self.assertEqual(query['status']['driver_monitor']['readings'], {})
+        finally:
+            server.set_scenario({'scenario': 'multiple', 'auto_enabled': False})
 
 
 if __name__ == '__main__':
