@@ -26,7 +26,8 @@ state = {'scenario': 'invalid', 'seq': 0, 'last': None, 'readings': {},
          'cycle_due': 0, 'next_read_at': 0, 'active': False,
          'cycle_active': False, 'cycle_status': 'idle', 'boot_complete': False,
          'lyx_steppers': ['stepper_x'], 'tmc_objects': ['tmc2209 extruder'],
-         'other_drivers': {}, 'driver_outcomes': {}, 'get_counts': {}}
+         'other_drivers': {}, 'driver_outcomes': {}, 'get_counts': {},
+         'layout_mode': 'cards'}
 
 PROFILES = {
     'stepper_x': {'CHIP_MODEL': 2316, 'RUN_CURRENT': 960, 'ALARM_CODE': 0,
@@ -35,6 +36,9 @@ PROFILES = {
                   'MOTOR_SPEED': 840, 'ERROR_ANGLE': 84},
     'stepper_z': {'CHIP_MODEL': 2316, 'RUN_CURRENT': 320, 'ALARM_CODE': 7,
                   'MOTOR_SPEED': 360, 'ERROR_ANGLE': 36},
+    **{'stepper_z%d' % index: {'CHIP_MODEL': 2316, 'RUN_CURRENT': 832,
+       'ALARM_CODE': 0, 'MOTOR_SPEED': 100 + index * 20, 'ERROR_ANGLE': index * 3}
+       for index in (1, 2, 3)},
 }
 TMC_CACHES = {
     'tmc2209 extruder': {'run_current': .7955, 'hold_current': .7955,
@@ -58,7 +62,7 @@ def sample(register, source, stepper='stepper_x'):
     start = time.monotonic()
     state['seq'] += 1
     state['reads'] += 1
-    outcome = 'ok' if state['scenario'] in ('ok', 'alarm', 'trend', 'multiple') else 'invalid'
+    outcome = 'ok' if state['scenario'] in ('ok', 'alarm', 'trend', 'multiple', 'four_z') else 'invalid'
     outcome = state['driver_outcomes'].get(stepper, outcome)
     values = {'CHIP_MODEL': 2316, 'RUN_CURRENT': 960,
               'ALARM_CODE': 2 if state['scenario'] == 'alarm' else 0,
@@ -66,7 +70,7 @@ def sample(register, source, stepper='stepper_x'):
     if state['scenario'] == 'trend':
         values['MOTOR_SPEED'] = int(750 + 350 * math.sin(start / 42))
         values['ERROR_ANGLE'] = int(70 + 55 * math.sin(start / 28))
-    elif state['scenario'] == 'multiple':
+    elif state['scenario'] in ('multiple', 'four_z'):
         values = PROFILES[stepper]
     end = time.monotonic()
     result = {'seq': state['seq'], 'stepper': stepper, 'register': register,
@@ -97,7 +101,7 @@ def seed_trend(stepper='stepper_x'):
             ended = now - (count-1-index)*cadence
             value = (int(750 + 350 * math.sin(ended / 42)) if register == 'MOTOR_SPEED'
                      else int(70 + 55 * math.sin(ended / 28)))
-            if state['scenario'] == 'multiple':
+            if state['scenario'] in ('multiple', 'four_z'):
                 value = PROFILES[stepper][register] + int(5 * math.sin(index / 8))
             state['seq'] += 1
             points.append({'seq': state['seq'], 'stepper': stepper,
@@ -110,13 +114,14 @@ def seed_trend(stepper='stepper_x'):
 
 def set_scenario(data):
     scenario = data.get('scenario', state['scenario'])
-    if scenario not in ('invalid', 'ok', 'alarm', 'trend', 'missing', 'offline', 'multiple', 'tmc_only'):
+    if scenario not in ('invalid', 'ok', 'alarm', 'trend', 'missing', 'offline', 'multiple', 'four_z', 'tmc_only'):
         raise ValueError('Unknown offline scenario')
     default_steppers = ([] if scenario == 'tmc_only' else
+                        ['stepper_z', 'stepper_z1', 'stepper_z2', 'stepper_z3'] if scenario == 'four_z' else
                         ['stepper_x', 'stepper_y'] if scenario == 'multiple' else ['stepper_x'])
     steppers = data.get('lyx_steppers', default_steppers)
     tmcs = data.get('tmc_objects', list(TMC_CACHES)
-                    if scenario in ('multiple', 'tmc_only') else ['tmc2209 extruder'])
+                    if scenario in ('multiple', 'four_z', 'tmc_only') else ['tmc2209 extruder'])
     outcomes = data.get('driver_outcomes', {})
     if (not isinstance(steppers, list) or not isinstance(tmcs, list)
             or any(s not in PROFILES for s in steppers)
@@ -133,9 +138,9 @@ def set_scenario(data):
         state['auto_enabled'] = data['auto_enabled']
     for stepper in state['lyx_steppers']:
         driver_state(stepper)
-        if scenario in ('trend', 'multiple'):
+        if scenario in ('trend', 'multiple', 'four_z'):
             seed_trend(stepper)
-            if scenario == 'multiple':
+            if scenario in ('multiple', 'four_z'):
                 for register in STATIC + ['ALARM_CODE']:
                     sample(register, 'fixture_seed', stepper)
     state['cycle_due'] = time.monotonic()
@@ -195,6 +200,9 @@ def status():
         'print_stats': {'state': 'standby'}, 'pause_resume': {'is_paused': False},
         'driver_monitor': {
             'schema_version': 1, 'min_interval': 0.0, 'active': state['active'],
+            'shutdown_on_alarm': True,
+            'protection': {s: {'enabled': False, 'armed': False, 'generation': 1}
+                                 for s in state['lyx_steppers']},
             'ready': True, 'next_allowed_at': 0.0, 'cooldown_remaining': 0.0,
             'auto_enabled': state['auto_enabled'], 'cycle_interval': CYCLE_INTERVAL,
             'read_gap': READ_GAP, 'read_order': list(DYNAMIC),
@@ -253,8 +261,14 @@ class Handler(BaseHTTPRequestHandler):
                 wanted = {unquote(x.split('=')[0]) for x in uri.query.split('&')}
                 data = {k: v for k, v in data.items() if k in wanted}
                 return self.reply({'result': {'eventtime': time.monotonic(), 'status': data}})
+            if uri.path == '/driver-monitor-user/layout.json':
+                layout = json.loads((ROOT / 'frontend/customization/layout.json').read_text())
+                layout['mode'] = state['layout_mode']
+                return self.reply(layout)
             if uri.path == '/__test':
                 return self.reply(copy.deepcopy(state))
+        if uri.path == '/driver-monitor-user/custom.css':
+            return self.reply((ROOT / 'frontend/customization/custom.css').read_bytes(), content_type='text/css')
         target = ROOT / ('preview/index.html' if uri.path == '/' else uri.path.lstrip('/'))
         try:
             target = target.resolve()
@@ -267,6 +281,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         data = json.loads(self.rfile.read(int(self.headers.get('Content-Length', '0'))) or '{}')
         with lock:
+            if self.path == '/__layout':
+                if data.get('mode') not in ('cards', 'compact', 'z-overview'):
+                    return self.reply({'error': 'Unknown preview layout'}, 400)
+                state['layout_mode'] = data['mode']
+                return self.reply({'mode': state['layout_mode']})
             if self.path == '/__scenario':
                 try:
                     set_scenario(data)
@@ -303,8 +322,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scenario', default='invalid')
     parser.add_argument('--paused', action='store_true')
+    parser.add_argument('--layout', choices=['cards', 'compact', 'z-overview'], default='cards')
     parser.add_argument('--port', type=int, default=18763)
     options = parser.parse_args()
+    state['layout_mode'] = options.layout
     set_scenario({'scenario': options.scenario, 'auto_enabled': not options.paused})
     threading.Thread(target=auto_worker, daemon=True).start()
     print('Offline embedded preview: http://127.0.0.1:%d ' % options.port +

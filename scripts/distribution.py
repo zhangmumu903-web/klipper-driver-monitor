@@ -1,14 +1,3 @@
-#!/usr/bin/env bash
-# Standalone public installer; a local checkout runs its own reviewed version.
-set -euo pipefail
-KDM_SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-command -v python3 >/dev/null || { printf '需要 Python 3.8+。\n' >&2; exit 2; }
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else "需要 Python 3.8+")'
-if [[ -f "$KDM_SCRIPT_DIR/scripts/manage.py" && -f "$KDM_SCRIPT_DIR/VERSION" ]]; then
-  exec python3 "$KDM_SCRIPT_DIR/scripts/manage.py" install "$@"
-fi
-# Keep stdin attached to the terminal so the downloaded manager can prompt.
-exec python3 -c "$(cat <<'KDM_BOOTSTRAP_PY'
 #!/usr/bin/env python3
 """Download a stable public release, verify its checksum, then run its manager."""
 import hashlib
@@ -132,6 +121,3 @@ def main(argv=None):
 
 if __name__ == '__main__':
     sys.exit(main())
-
-KDM_BOOTSTRAP_PY
-)" install "$@"

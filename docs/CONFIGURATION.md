@@ -4,7 +4,7 @@
 
 ## 监测配置
 
-将[监测配置样例](../backend/driver-monitor.cfg.sample)复制到自己的配置目录并 include，或直接添加以下单实例配置：
+v1.0.0 安装器会添加或沿用唯一监控节。安装后编辑已有节，不要再复制一份。手动安装时，可将[监测配置样例](../backend/driver-monitor.cfg.sample)复制到自己的配置目录并 include，或直接添加以下单实例配置：
 
 ```ini
 [driver_monitor]

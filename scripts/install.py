@@ -63,7 +63,12 @@ def target_config(hostname, origins, endpoints):
 
 def make_assets(config):
     result = {}
-    for name in ('driver-monitor.mjs', 'driver-monitor-core.mjs'):
+    # Production modules live directly under frontend/. Tests and persistent
+    # customization templates are deliberately excluded from versioned assets.
+    modules = sorted(path.name for path in (ROOT / 'frontend').glob('*.mjs')
+                     if not path.name.endswith('.test.mjs')
+                     and not path.name.startswith(('test-', 'test_')))
+    for name in modules:
         text = regular(ROOT / 'frontend' / name).decode('utf-8')
         text = re.sub(r"(['\"]\./[^'\"]+)\.mjs(['\"])", r'\1.js\2', text)
         result[name.replace('.mjs', '.js')] = text.encode('utf-8')

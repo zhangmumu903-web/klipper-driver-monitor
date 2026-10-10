@@ -1,4 +1,6 @@
 import {TARGET_CONFIG} from './driver-monitor-config.mjs';
+import {CUSTOMIZATION_PATHS, DEFAULT_LAYOUT, displayName, groupDrivers, loadLayout,
+  loadCustomRenderer, rendererData} from './driver-monitor-layout.mjs';
 import {MonitorController, MoonrakerApi, PREVIEW_HOSTNAME,
   DYNAMIC_REGISTERS, readingDisplay, targetProblem, trendData,
   monitorScheduleLabel, alarmProtectionDisplay, alarmShutdownMessage} from './driver-monitor-core.mjs';
@@ -92,13 +94,14 @@ export function isDashboardLocation(href) {
   return route === '' || route === '/';
 }
 
-function createDriverCard(driver, onRefresh) {
+export function createDriverCard(driver, onRefresh, layout, customRenderer) {
   const card = el('section', 'dm-card');
   card.dataset.driverKey = driver.key; card.dataset.stepper = driver.stepper;
-  card.setAttribute('aria-label', `${driver.stepper} 驱动监测`);
+  card.setAttribute('aria-label', `${displayName(driver, layout)} 驱动监测`);
   const header = el('header', 'dm-header');
-  header.append(el('h3', '', driver.stepper),
+  header.append(el('h3', '', displayName(driver, layout)),
     el('span', 'dm-mode', driver.type.toUpperCase()));
+  header.title = driver.stepper;
   card.append(header);
   const read = button('立即刷新', 'dm-primary'); read.dataset.action = 'refresh';
   read.addEventListener('click', () => onRefresh(driver.key)); header.append(read);
@@ -111,6 +114,8 @@ function createDriverCard(driver, onRefresh) {
   for (const register of DYNAMIC_REGISTERS) {
     const row = el('div', register === 'ALARM_CODE' ? 'dm-reading dm-alarm' : 'dm-reading');
     row.dataset.register = register;
+    row.hidden = (register === 'MOTOR_SPEED' && !layout.show.speed)
+      || (register === 'ERROR_ANGLE' && !layout.show.angle);
     const value = el('strong', 'dm-number', '—');
     const meta = el('span', 'dm-reading-meta');
     const status = el('span', '', '未读'), time = el('time', '', '—');
@@ -119,15 +124,27 @@ function createDriverCard(driver, onRefresh) {
   }
   const details = el('details', 'dm-details');
   details.append(el('summary', '', '驱动信息'));
+  details.hidden = !layout.show.driver_details;
   const secondary = el('p', 'dm-secondary-info'); details.append(secondary);
   const trends = el('section', 'dm-trends');
+  trends.hidden = !layout.show.trends || (!layout.show.speed && !layout.show.angle);
   const speedTrend = createTrendChart('MOTOR_SPEED', '转速');
   const angleTrend = createTrendChart('ERROR_ANGLE', '角度误差');
+  speedTrend.figure.hidden = !layout.show.speed; angleTrend.figure.hidden = !layout.show.angle;
   trends.append(el('div', 'dm-trend-heading', '最近 5 分钟'), speedTrend.figure, angleTrend.figure);
   const message = el('p', 'dm-message'); message.setAttribute('role', 'status');
   message.setAttribute('aria-live', 'polite'); message.hidden = true;
-  card.append(protection, values, trends, details, message);
-  let graphSnapshot = null;
+  const custom = el('div', 'dm-custom-area');
+  const customWarning = el('p', 'dm-custom-warning'); customWarning.hidden = true;
+  customWarning.setAttribute('role', 'status');
+  const fault = el('p', 'dm-fault'); fault.hidden = true; fault.setAttribute('role', 'status');
+  card.append(protection, values, fault, trends, details, custom, customWarning, message);
+  let graphSnapshot = null, customSnapshot = null, customTrustKey = null;
+  let customCleanup = null, customFailed = false;
+  const cleanCustom = () => {
+    try { customCleanup?.(); } catch (_) { /* A display cleanup cannot stop monitoring. */ }
+    customCleanup = null;
+  };
   return {element: card, render(state, controller, targetError) {
     const problem = controller.actionProblem('refresh', driver.key);
     read.disabled = state.busy || Boolean(problem); read.title = problem;
@@ -143,6 +160,36 @@ function createDriverCard(driver, onRefresh) {
     protection.dataset.tone = protectionView?.tone || 'neutral';
     const data = state.connected && !targetError ? monitor?.readings?.[driver.stepper] : null;
     const trendSnapshot = state.connected && !targetError ? state.snapshot : null;
+    const displayStatus = Object.freeze({connected: state.connected === true,
+      trusted: state.connected === true && !targetError && Boolean(monitor),
+      message: !state.connected ? '网页与后台连接中断，当前驱动数据不可用。'
+        : targetError || (!monitor ? '后台监测数据不可用。' : '')});
+    const trustKey = JSON.stringify(displayStatus);
+    if (customRenderer && !customFailed && (state.snapshot !== customSnapshot || trustKey !== customTrustKey)) {
+      customSnapshot = state.snapshot; customTrustKey = trustKey; cleanCustom();
+      // A connection failure can retain the same cached snapshot. Drop any old
+      // extension content before passing null readings for the untrusted state.
+      if (!displayStatus.trusted) custom.replaceChildren();
+      try {
+        const result = customRenderer(Object.freeze({element: custom, ...rendererData(driver, data, displayStatus)}));
+        if (result && typeof result.then === 'function') {
+          result.catch?.(() => {});
+          throw new Error('render(context) 必须同步返回');
+        }
+        customCleanup = typeof result === 'function' ? result : null;
+      } catch (error) {
+        customFailed = true; custom.replaceChildren();
+        customWarning.textContent = `自定义附加区域出错，标准监测继续显示：${error?.message || '显示模块异常'}。`;
+        customWarning.hidden = false;
+      }
+    }
+    // Even if optional value fields are hidden, a failed read remains visible.
+    const failed = DYNAMIC_REGISTERS.filter(register =>
+      readingDisplay(data?.[register], state.snapshot, state.receivedAt).status === '读取失败');
+    fault.textContent = !state.connected ? '通讯状态：网页尚未连接后台，不能确认当前驱动状态。'
+      : targetError ? `目标状态：${targetError}`
+      : failed.length ? `通讯异常：${failed.map(register => names[register]).join('、')}读取失败，请检查连接。` : '';
+    fault.hidden = !fault.textContent;
     if (trendSnapshot !== graphSnapshot) {
       graphSnapshot = trendSnapshot;
       speedTrend.update(trendSnapshot, driver.stepper, state.receivedAt);
@@ -162,7 +209,7 @@ function createDriverCard(driver, onRefresh) {
       const label = register === 'CHIP_MODEL' ? '型号' : '电流寄存器原值';
       return `${label}：${view.value}（${view.status} · ${clockText(view.wallTime)}）`;
     }).join('；');
-  }};
+  }, destroy() { cleanCustom(); card.remove(); }};
 }
 
 export function mountDriverMonitor(targetElement) {
@@ -173,6 +220,11 @@ export function mountDriverMonitor(targetElement) {
   const shadow = host.attachShadow({mode: 'open'});
   const sheet = el('link'); sheet.rel = 'stylesheet';
   sheet.href = new URL('./driver-monitor.css', import.meta.url).href;
+  const customSheet = el('link'); customSheet.rel = 'stylesheet';
+  customSheet.href = `${CUSTOMIZATION_PATHS.style}?v=${Date.now()}`;
+  const layoutWarning = el('p', 'dm-layout-warning'); layoutWarning.hidden = true;
+  layoutWarning.setAttribute('role', 'status');
+  let layout = DEFAULT_LAYOUT, customRenderer = null, layoutVersion = 0;
   const toolbar = el('section', 'dm-toolbar'); toolbar.setAttribute('aria-label', '全部驱动监测控制');
   const header = el('header', 'dm-header'); header.append(el('h2', '', '驱动监测'));
   const auto = button('暂停全部 LYX 监测', 'dm-secondary'); auto.dataset.action = 'auto';
@@ -188,10 +240,10 @@ export function mountDriverMonitor(targetElement) {
   protectionNote.textContent = '报警停机保护已开启，不能暂停全部 LYX 监测。';
   const shutdownReason = el('p', 'dm-shutdown-reason'); shutdownReason.hidden = true;
   shutdownReason.setAttribute('role', 'alert');
-  toolbar.append(header, preview, protectionNote, shutdownReason, message);
+  toolbar.append(header, preview, layoutWarning, protectionNote, shutdownReason, message);
   const collection = el('div', 'dm-cards');
   const empty = el('p', 'dm-empty', '尚未发现 LYX 驱动，请检查 LYX 配置及 [driver_monitor] 是否已加载。');
-  shadow.append(sheet, toolbar, collection, empty); targetElement.append(host);
+  shadow.append(sheet, customSheet, toolbar, collection, empty); targetElement.append(host);
 
   const cards = new Map();
   let driverSignature = '', refreshTimer = null, ticker = null;
@@ -219,16 +271,22 @@ export function mountDriverMonitor(targetElement) {
     preview.hidden = !targetOptions().preview;
     const expectedHostname = targetOptions().preview ? PREVIEW_HOSTNAME : TARGET_CONFIG.hostname || '目标未配置';
     header.title = `${state.snapshot?.info?.hostname || expectedHostname} · ${location.origin}`;
-    const signature = JSON.stringify(state.drivers.map(d => [d.key, d.type, d.stepper]));
+    const signature = JSON.stringify([layoutVersion, state.drivers.map(d => [d.key, d.type, d.stepper])]);
     if (signature !== driverSignature) {
       driverSignature = signature;
-      const keys = new Set(state.drivers.map(driver => driver.key));
-      for (const [key, view] of cards) if (!keys.has(key)) { view.element.remove(); cards.delete(key); }
-      for (const driver of state.drivers) {
-        if (!cards.has(driver.key)) cards.set(driver.key, createDriverCard(driver, key => {
-          syncActivity(); if (active()) safe(controller.refreshDriver(key), key);
-        }));
-        collection.append(cards.get(driver.key).element);
+      for (const view of cards.values()) view.destroy();
+      cards.clear(); collection.replaceChildren(); host.dataset.layout = layout.mode;
+      for (const group of groupDrivers(state.drivers, layout)) {
+        const section = el('section', 'dm-driver-group'); section.dataset.group = group.key;
+        const grid = el('div', 'dm-card-grid');
+        if (group.title) section.append(el('h3', 'dm-group-title', `${group.title} · ${group.drivers.length}`));
+        for (const driver of group.drivers) {
+          const view = createDriverCard(driver, key => {
+            syncActivity(); if (active()) safe(controller.refreshDriver(key), key);
+          }, layout, customRenderer);
+          cards.set(driver.key, view); grid.append(view.element);
+        }
+        section.append(grid); collection.append(section);
       }
     }
     empty.hidden = state.drivers.length > 0;
@@ -248,6 +306,8 @@ export function mountDriverMonitor(targetElement) {
     message.textContent = (state.messageKey === null ? state.message : '') || backgroundState;
     if (targetError) message.textContent = targetError;
     else if (hasLyx && state.connected && !state.busy && autoProblem) message.textContent = autoProblem;
+    if (!protectionNote.hidden && message.textContent === protectionNote.textContent)
+      message.textContent = backgroundState;
     for (const view of cards.values()) view.render(state, controller, targetError);
   }
   const active = () => !disposed && host.isConnected && isDashboardLocation(location.href);
@@ -307,11 +367,27 @@ export function mountDriverMonitor(targetElement) {
     window.removeEventListener('pagehide', pageLeaving);
     window.removeEventListener('popstate', navigationChanged);
     window.removeEventListener('hashchange', navigationChanged);
+    for (const view of cards.values()) view.destroy();
     host.remove(); cards.clear();
   }
   syncActivity(); syncTheme();
   if (active() && !document.hidden) safe(controller.refresh()); // One GET loop for all cards.
   render(controller.state);
+  // Layout and renderer loading never block the backend cache connection.
+  loadLayout().then(async result => {
+    if (disposed) return;
+    layout = result.layout; layoutVersion++;
+    layoutWarning.textContent = result.warning; layoutWarning.hidden = !result.warning;
+    render(controller.state);
+    const extension = await loadCustomRenderer(layout);
+    if (disposed) return;
+    customRenderer = extension.render;
+    if (extension.warning) {
+      layoutWarning.textContent = [result.warning, extension.warning].filter(Boolean).join(' ');
+      layoutWarning.hidden = false;
+    }
+    if (customRenderer) { layoutVersion++; render(controller.state); }
+  });
   return {controller, host, destroy};
 }
 

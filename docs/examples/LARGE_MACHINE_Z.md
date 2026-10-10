@@ -49,12 +49,12 @@ MCU 的 Z3_UART GPIO ── Z3 模块已确认的单线接口（地址 1）
 在运行 Klipper 的主机上，首次安装可用以下入口；已经克隆过的仓库先核对分支和本地改动，不重复覆盖：
 
 ```bash
-git clone --branch feat/initial-distribution --single-branch https://github.com/zhangmumu903-web/klipper-driver-monitor.git
+git clone --branch v1.0.0 --single-branch https://github.com/zhangmumu903-web/klipper-driver-monitor.git
 cd klipper-driver-monitor
 bash install.sh --plan
 ```
 
-选择“后台 + Fluidd”，核对源码目录、网页目录、`/printer/info` 的 hostname 及 Fluidd 页面/API 地址。确认计划后执行 `bash install.sh`，检查计划并输入 `yes` 才写入。两种系统使用同一入口，常见路径区别如下：
+默认安装后台和 Fluidd，核对源码目录、网页目录、`/printer/info` 的 hostname 及 Fluidd 页面/API 地址。确认计划后执行 `bash install.sh`，检查计划并输入 `yes` 才写入。两种系统使用同一入口，常见路径区别如下：
 
 | 项目 | 普通 Linux 常见值 | FLYOS 已使用过的布局 |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ bash install.sh --plan
 | Fluidd | `~/fluidd` | `/data/fluidd` |
 | CFG 目录 | `~/printer_data/config` | `/usr/share/printer_data/config` |
 
-这些不是路径检测结果，必须与本机实际服务一致。安装工具不会改 CFG、重启或刷 MCU。完整安装、权限及回退步骤见[安装手册](../INSTALLATION.md)。已稳定运行匹配 LYX 固件的机器不必为增加卡片再次刷写。
+这些不是路径检测结果，必须与本机实际服务一致。安装工具仅添加/沿用监控 CFG 入口，保持电机参数；不重启或刷 MCU。完整安装、权限及回退步骤见[安装手册](../INSTALLATION.md)。已稳定运行匹配 LYX 固件的机器不必为增加卡片再次刷写。
 
 ## 3. 配置四颗 Z 驱动与一个后台
 
@@ -82,7 +82,7 @@ lyx9231 stepper_z / stepper_z1 / stepper_z2 / stepper_z3
 [include lyx-monitor.cfg]
 ```
 
-已有同名 LYX 或监测节时编辑原节，不再重复 include。示例中 `microstep: 16` 要与各自运动节的 `microsteps: 16` 相等；`driver_motor_type: 1` 对应 `full_steps_per_rotation: 200`。不要把局部示例当成完整运动配置。
+已有同名 LYX 或监测节时编辑原节，不再重复 include。v1.0.0 安装器可能已经生成 `driver-monitor.cfg`，此时只在该文件调整监控节，不再复制模板中的第二个 `[driver_monitor]`。示例中 `microstep: 16` 要与各自运动节的 `microsteps: 16` 相等；`driver_motor_type: 1` 对应 `full_steps_per_rotation: 200`。不要把局部示例当成完整运动配置。
 
 本例在唯一的 `[driver_monitor]` 中显式使用：
 
@@ -96,7 +96,7 @@ read_gap: 0.2
 
 这是对模板内容的说明，不是让你再添加第二个监测节。`true` 是本例主动开启保护，软件默认仍为 `false`。半流示例 `driver_half_cur_en: 0` 表示没有开启自动半流，不能把 `hold_current` 当成已测得的保持电流。参数限制与可写范围见[配置手册](../CONFIGURATION.md)。
 
-按[安装手册第 5 节](../INSTALLATION.md#5-重新加载主机代码)的实际服务分支重新加载；FLYOS 尤其先检查 `ExecStartPre` 是否包含 `fly-flash`，不要直接套用服务重启命令。LYX 原生模块重新连接时会根据 CFG 写入并回读初始化寄存器；后台采集只读不等于重新加载过程没有写入。
+按[安装手册的启用和验收](../INSTALLATION.md#启用和验收)的实际服务分支重新加载；FLYOS 尤其先检查 `ExecStartPre` 是否包含 `fly-flash`，不要直接套用服务重启命令。LYX 原生模块重新连接时会根据 CFG 写入并回读初始化寄存器；后台采集只读不等于重新加载过程没有写入。
 
 ## 4. 查看和逐项验收
 

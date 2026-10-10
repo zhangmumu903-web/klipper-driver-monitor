@@ -1,0 +1,8 @@
+/* 此文件在卡片的 ShadowRoot 内加载；升级时保留。
+ * 示例：取消下面的注释，可改变卡片边框和按钮颜色。
+ * 请保留报警、通讯故障及保护状态可见。
+ */
+/*
+.dm-card { border: 1px solid #54758c; border-radius: 8px; }
+.dm-primary { background: #287e88; }
+*/

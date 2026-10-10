@@ -162,7 +162,7 @@ class SetupTest(unittest.TestCase):
             result = setup.run_setup(plan_only=True,
                                      input_fn=self.answers([]), output=self.messages.append)
         self.assertEqual('plan', result['status'])
-        self.assertEqual(6, len(result['files']))
+        self.assertEqual(7, len(result['files']))
         apply.assert_not_called()
         self.assertEqual([], self.prompts)
         self.assert_unmodified()
@@ -178,7 +178,7 @@ class SetupTest(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()):
             result = setup.run_setup(input_fn=self.answers(['yes']), output=self.messages.append)
         self.assertEqual('installed', result['status'])
-        self.assertEqual(6, result['files'])
+        self.assertEqual(7, result['files'])
         self.assertIn(setup.installer.BEGIN.encode(), self.index.read_bytes())
         setup.installer.rollback(result['receipt'], apply=True)
         self.assertEqual(self.original, self.index.read_bytes())

@@ -37,6 +37,8 @@ class InstallerTest(unittest.TestCase):
             hostname='printer-demo', origin=['http://192.0.2.10'], api_url=['http://192.0.2.10:7125'],
             with_lyx=False)
         self.backups = self.base / 'backups'
+        self.asset_count = len(installer.make_assets(installer.target_config(
+            self.args.hostname, self.args.origin, self.args.api_url)))
 
     def install(self, plan=None):
         with contextlib.redirect_stdout(io.StringIO()):
@@ -44,7 +46,7 @@ class InstallerTest(unittest.TestCase):
 
     def test_plan_has_no_side_effects(self):
         plan = installer.build_plan(self.args)
-        self.assertEqual(6, len(plan['changes']))
+        self.assertEqual(self.asset_count + 2, len(plan['changes']))
         self.assertEqual(self.original, self.index.read_bytes())
         self.assertFalse((self.extras / 'driver_monitor.py').exists())
         self.assertFalse(self.backups.exists())
@@ -55,7 +57,7 @@ class InstallerTest(unittest.TestCase):
         self.assertIn(installer.BEGIN.encode(), self.index.read_bytes())
         self.assertEqual([], installer.build_plan(self.args)['changes'])
         preview = installer.rollback(result['receipt'])
-        self.assertEqual(6, preview['files'])
+        self.assertEqual(self.asset_count + 2, preview['files'])
         self.assertNotEqual(self.original, self.index.read_bytes())
         installer.rollback(result['receipt'], apply=True)
         self.assertEqual(self.original, self.index.read_bytes())
@@ -104,7 +106,7 @@ class InstallerTest(unittest.TestCase):
             installer.build_plan(self.args)
         self.args.with_lyx = True
         result = self.install()
-        self.assertEqual(9, result['files'])
+        self.assertEqual(self.asset_count + 5, result['files'])
         installer.rollback(result['receipt'], apply=True)
         for name in installer.LYX_FILES:
             self.assertFalse((self.extras / name).exists())
@@ -236,7 +238,7 @@ class InstallerTest(unittest.TestCase):
             return real_regular(path, optional)
         with patch.object(installer, 'regular', side_effect=only_web_files):
             plan = installer.build_plan(self.args)
-            self.assertEqual(5, len(plan['changes']))
+            self.assertEqual(self.asset_count + 1, len(plan['changes']))
             self.assertTrue(all(self.fluidd.resolve() in change['path'].parents
                                 for change in plan['changes']))
             result = self.install(plan)

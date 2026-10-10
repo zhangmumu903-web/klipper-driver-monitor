@@ -1,95 +1,87 @@
 # Klipper Driver Monitor
 
-Klipper 驱动监测扩展：LYX9231 后台采集、使能后报警停机，以及 Fluidd 每个 LYX 驱动一张独立卡片。网页关闭后，采集与保护继续由 Klipper 运行。
+通用 LYX9231 监控：Klipper 后台采集、Fluidd 每轴独立卡片、曲线与可选的使能后报警停机。普通 Linux 和 FLYOS 共用安装入口，适用于已有兼容 LYX 支持的 Klipper 主机，不限定主板型号。
 
-本项目由已在 FLY C8 Pro 上使用的实现整理而来。LYX 主动读取报警、转速和角度误差；本组件不查询或显示 TMC 状态，机器原有 TMC 运动控制、固件支持及保护机制保持不变。它不是原厂调参上位机的完整替代品，也不是官方 Klipper／Fluidd 插件。
+**安装只负责监控后台、网页卡片及监控加载入口。** 不刷 MCU，不修改电流、细分、模式、引脚和运动配置，不替换 LYX/TMC 驱动。依赖缺失时说明原因，参见[依赖说明](docs/DEPENDENCIES.md)。
 
-## 通用安装
+## 一键安装
 
-安装入口适用于已有 Klipper 的 Linux 主机，普通 Linux 与 FLYOS 使用同一个脚本，**不限定 C8P 或 MCU 型号**。需要 Bash 和 Python 3.8+。当前交付在 `feat/initial-distribution`，尚未合入 `main`：
+在打印机 Linux 上位机终端执行，需要 Bash、Python 3.8+、curl：
 
-```sh
-git clone --branch feat/initial-distribution --single-branch https://github.com/zhangmumu903-web/klipper-driver-monitor.git
-cd klipper-driver-monitor
-bash install.sh
+```bash
+curl --fail --location --show-error \
+  https://github.com/zhangmumu903-web/klipper-driver-monitor/releases/latest/download/install.sh \
+  -o /tmp/klipper-driver-monitor-install.sh && \
+bash /tmp/klipper-driver-monitor-install.sh
 ```
 
-向导选择“后台 + Fluidd／仅后台／仅 Fluidd”，统一用于 LYX 监测，不再提供纯 TMC 选项。它列出本机常见路径供确认，也可填写自定义目录；多个候选不会自动替你决定。计划展示后，输入明确的 `yes` 才写文件并备份。
+入口下载正式稳定版本并核对 SHA256，向导识别路径、展示计划、备份安装。多实例须明确选择，下载失败不改变现有安装。已有完整源码/离线包时，在工具目录执行：
 
-```sh
-# 只生成安装计划；不执行安装。
-bash install.sh --plan
-# 无交互终端或需要明确参数时，使用直接命令行。
-bash install.sh plan --help
+```bash
+bash install.sh --plan             # 仅预览
+bash install.sh                    # 后台和 Fluidd
+bash install.sh --frontend-only    # 仅网页卡片
+bash install.sh --backend-only     # 仅后台监控
 ```
 
-下载仓库需要网络；安装工具本身不联网、不改 CFG、不重启服务、不刷 MCU。文件安装后，按[安装手册](docs/INSTALLATION.md)加载后台配置和检查页面。使用其他前端时可只装后台，本仓库的卡片仅支持 Fluidd 的同源网站根路径部署。
+安装结果会输出工具目录、备份和待重启状态。首次加载或更新后台需在空闲时重启 Klipper 主机进程；仅换卡片样式不用重启。安装器不自动重启、使能、运动或加热，原 LYX 驱动重启时仍按已有 CFG 初始化。详见[安装手册](docs/INSTALLATION.md)。
 
-## 先读这里
+## 更新、检查和卸载
 
-1. **只安装监测功能**：使用上面的通用入口；也可按[安装、升级与卸载](docs/INSTALLATION.md)分别安装后台和 Fluidd。
-2. **普通 Klipper 尚不认识 LYX**：先看[驱动与 MCU 依赖](docs/DEPENDENCIES.md)。仅复制 `driver_monitor.py` 不会增加 MCU 的 Modbus UART 命令。
-3. **可选的 C8P 固件工具**：仅在另需构建 C8P 固件时使用[C8P 构建脚本](docs/C8P_FIRMWARE.md)。安装监测脚本不要求使用这两个入口，其他主板仍按自己的 Klipper 编译流程处理。
-4. **只想了解原理**：看[后台实现](docs/ARCHITECTURE.md)与[网页显示逻辑](docs/DISPLAY.md)。
+在安装输出的工具目录运行；多实例各自使用独立 `--state-dir`：
 
-## 中文手册
+```bash
+bash doctor.sh                    # 检查安装与运行状态
+bash update.sh                    # 下载稳定版并更新
+bash update.sh --local            # 用当前完整离线包更新
+bash repair.sh                    # Fluidd 更新后修复入口
+bash uninstall.sh --frontend-only # 只卸卡片，后台保护继续
+bash uninstall.sh                 # 完整卸载监控组件
+bash rollback.sh                  # 回退最近一次受管变更
+```
 
-| 章节 | 内容 |
+升级保留自定义内容。卸载只移除本工具管理的文件和入口，保留驱动、电机配置、用户样式和备份。**完整卸载会停止本组件的采集与报警保护**；遇到用户自有的监控配置会明确提示处理。修复或卸载不会用旧版整份 `index.html` 覆盖 Fluidd。
+
+## 自定义卡片
+
+标准卡片、紧凑列表、Z 总览三种布局。Z 总览优先展示多 Z，其他已配置 LYX 轴继续显示；本组件不查询或显示 TMC。
+
+| Fluidd 根目录下的文件 | 用途 |
 | --- | --- |
-| [大型机器四 Z 示范案例](docs/examples/LARGE_MACHINE_Z.md) | 四 Z 独立 UART、带注释 CFG、安装与读回、全轴 LYX 卡片和报警预期 |
-| [Wiki 首页源稿](wiki/Home.md)／[筹备说明](wiki/README.md) | 已准备导航与章节规划；GitHub Wiki 尚未发布 |
-| [安装、升级与卸载](docs/INSTALLATION.md) | 路径、目标身份、预览改动、备份安装、配置加载、验收、回退 |
-| [驱动与 MCU 依赖](docs/DEPENDENCIES.md) | 作者仓库来源、本项目修补、MCU 固件前提、单线 UART 边界 |
-| [C8P 固件构建](docs/C8P_FIRMWARE.md) | 普通 Linux／FLYOS、USB／USB 转 CAN 1M、隔离源码、产物与配套主机安装 |
-| [配置与命令](docs/CONFIGURATION.md) | CFG 三层配置、电流／细分／模式、监测命令与原生读写命令 |
-| [后台实现](docs/ARCHITECTURE.md) | 调度流程图、完整 UART 事务、共享锁、缓存、日志、报警保护 |
-| [网页显示逻辑](docs/DISPLAY.md) | 独立卡片、三秒缓存查询、曲线、时间、按钮、跨客户端目标校验 |
-| [故障排查](docs/TROUBLESHOOTING.md) | 未发现驱动、配置或通信错误、页面无数据、保护状态 |
-| [验证范围](docs/VALIDATION.md) | 当前离线检查、历史实机结果、尚未覆盖的硬件验证 |
+| `driver-monitor-user/layout.json` | 布局、轴顺序、名称、数值/曲线/详情开关 |
+| `driver-monitor-user/custom.css` | 字体、颜色、尺寸与间距，在卡片内部生效 |
+| `driver-monitor-user/custom-renderer.js` | 高级附加显示区域，默认关闭 |
 
-## 功能与边界
+编辑后刷新页面，同机所有浏览器读取相同配置；升级保留原文件。无效配置/渲染器错误会提示并回退，基本报警与保护继续显示。[自定义手册](docs/CUSTOMIZATION.md)
 
-- 后台逐驱动串行读取 `ALARM_CODE → MOTOR_SPEED → ERROR_ANGLE`，每项等完整事务结束再读下一项。
-- 型号、电流设定启动尝试一次；动态历史在内存保留最多 10 分钟／每系列 600 点。
-- 可选 `shutdown_on_alarm:true`：同一已生效的逻辑使能周期内读到有效非零报警，调用 Klipper shutdown，并记录中文原因。保护开启时不能暂停采集。
-- Fluidd 每个已配置并被后台发现的 LYX 一张卡片；速度／角度误差各一张最近 5 分钟曲线，失败断线、不补零。TMC 不显示，也不进入本组件状态查询。
-- 网页只定时读取缓存；打开更多浏览器不会新增更多 UART 自动采集器。
-- 电流、细分、运行模式放 CFG。转速／误差当前显示寄存器原值，电流设定不是实测相电流。
+## 后台逻辑
 
-保护默认关闭，需要在自己的机器核实后显式开启。它依赖软件轮询和 Klipper 逻辑使能，不能代替驱动自身硬件保护。通信失败不冒充报警码；没有硬性一秒内停机保证。真实故障停机尚未实机验证，详见验证章节。
+`驱动 → Klipper 后台串行采集 → Moonraker 缓存接口 → Fluidd 显示`
 
-## 安装选项
+- 逐轴读取报警、转速、角度误差，等待每项完整事务返回；原生 UART 可能内部重试。
+- 型号、电流启动时读取，失败后续补读；多开浏览器不增加自动 UART 采集器，关网页也继续采集。
+- 新配置默认 `shutdown_on_alarm:false`，已有设置保持。开启后，仅同一已生效使能周期中的新鲜有效非零报警触发整台 Klipper 停机并记录中文原因；通信失败不冒充报警。
+- 开启保护不能暂停监测。轮询不承诺固定一秒内响应，不代替驱动硬件保护。
+- 曲线显示寄存器原值，电流设定不等于仪表实测相电流；短时回读与真实故障、长期运行分别验证。
 
-直接命令支持 `--components all|backend|fluidd`，默认 `all`；`--drivers lyx` 为默认值，保留显式写法。新的 `plan/install --drivers tmc` 会明确拒绝，旧版安装收据仍可回滚。安装器保留 `plan`、`install`、`rollback`；直接命令只有加上 `--with-lyx` 才会安装配套三份 LYX 主机模块，交互向导安装后台时自动包含它，并拒绝覆盖未知修改。只装后台不要求网页路径／地址；只装 Fluidd 不要求 Klipper 源码路径，也不会安装 LYX 模块，但显示数据仍需要已加载的 LYX 后台。完整命令示例见[安装手册](docs/INSTALLATION.md)。
+## 文档
 
-## 开发与离线预览
+[安装升级卸载](docs/INSTALLATION.md) · [自定义显示](docs/CUSTOMIZATION.md) · [参数配置](docs/CONFIGURATION.md) · [后台实现](docs/ARCHITECTURE.md) · [四 Z 示例](docs/examples/LARGE_MACHINE_Z.md) · [排错](docs/TROUBLESHOOTING.md) · [验证范围](docs/VALIDATION.md) · [变更记录](CHANGELOG.md)
 
-```sh
+[GitHub Wiki](https://github.com/zhangmumu903-web/klipper-driver-monitor/wiki) 保留早期已发布手册，当前稳定版以仓库文档为准。`main` 用于稳定版本，安装入口使用正式 Release，开发分支不会自动分发。C8P 固件构建工具独立保留，安装器不会调用。[旧安装文档](docs/LEGACY_INSTALLATION.md)供早期收据回退参考。
+
+## 开发
+
+```bash
 python3 -B backend/test_driver_monitor.py
 python3 -B -m unittest discover -s tests -v
-node --test frontend/driver-monitor.test.mjs
+node --test frontend/*.test.mjs
 python3 -B -m unittest discover -s preview -p 'test_*.py' -v
 python3 preview/server.py
 ```
 
-Python 3.8+ 用于安装／预览工具，Node.js 18+ 用于前端测试；监测模块与配套 LYX 文件另通过 Python 3.7 语法检查。预览只监听 `127.0.0.1:18763`，明确显示模拟数据，不连接打印机。运行中的监测模块不依赖 Node.js。
-
-## 目录
-
-```text
-backend/        Klipper 扩展、样例配置与后端测试
-frontend/       无构建依赖的卡片、显示控制器及目标配置
-vendor/lyx/     固定来源的三份修补版主机模块及哈希
-firmware/       固定来源的 r3 UART 补丁与构建材料，不含通用固件
-scripts/        本机安装工具、C8P USB／USB-CAN 隔离构建脚本
-install.sh      通用交互安装入口
-config/         带注释的驱动 CFG 模板
-wiki/           Wiki 首页、导航源稿与章节规划
-preview/        不连接打印机的模拟服务器
-tests/          安装与恢复测试
-docs/           中文手册
-```
+预览只监听本机、使用模拟数据。监控运行不需要 Node.js，前端测试需 Node.js 18+。
 
 ## 来源与许可
 
-依赖 [zylo117/klipper](https://github.com/zylo117/klipper) 的 LYX 实现，固定基础提交 `231c50815e385e3ecae671577a9815f6f5b5d4a9`。本仓库附带的 LYX 主机模块为经过本项目修补的版本，不能标作作者未修改原版。按 GNU GPLv3 分发，见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE.md)。没有包含整机配置、私有日志、凭据或预编译板卡固件。
+GNU GPLv3，见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE.md)。依赖源于 [zylo117/klipper](https://github.com/zylo117/klipper)，随仓驱动材料含本项目修补，不能标作作者未修改版本。公开包不包含机器配置、私有日志、凭据和预编译主板固件。本项目不是官方 Klipper/Fluidd 插件。

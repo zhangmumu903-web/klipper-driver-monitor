@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "mode": "cards",
+  "axis_order": [],
+  "axis_names": {},
+  "show": {
+    "speed": true,
+    "angle": true,
+    "trends": true,
+    "driver_details": true
+  },
+  "custom_renderer": {"enabled": false}
+}

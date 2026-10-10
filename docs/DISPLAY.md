@@ -171,6 +171,8 @@ python3 -B preview/server.py --scenario trend --port 18764
 python3 -B preview/server.py --scenario ok --paused
 ```
 
+三种正式布局与共享配置见[自定义显示](CUSTOMIZATION.md)。预览可加 `--layout cards|compact|z-overview`；页面布局选择只改变模拟服务内存，不写实际设备文件。四 Z 场景用 `--scenario four_z`。
+
 可用场景为 `invalid`（默认无效回复）、`ok`、`alarm`、`trend`、`missing`、`offline`、`multiple` 和 `tmc_only`（仅含 TMC，验证无 LYX 卡片的空状态）。可用启动参数或页面场景控件切换。模拟按钮只向本机模拟接口发送请求，预览结果不能作为硬件读取或真实报警停机验证。
 
 预览 HTML 明确设置 `data-driver-monitor-preview="true"`，页面地址必须为 HTTP(S) loopback，模拟接口 hostname 必须是 `driver-monitor-demo`，才可在空默认配置下展示。不要加真实设备的 `printer` 查询参数；预览不会放行未知或重复参数。直接以 `file://` 打开 HTML 不属于受支持的预览入口。

@@ -6,10 +6,12 @@
 
 | 使用方式 | 主机与 MCU 前提 |
 | --- | --- |
-| LYX 监测，默认 `--drivers lyx` | 匹配的 LYX 主机模块和支持其 Modbus UART 命令的 MCU 固件 |
-| 仅 Fluidd，`--components fluidd` | 已工作的同源 Moonraker 接口；LYX 监测需后台已安装并加载 |
+| 后台监测，默认安装或 `--backend-only` | 已有兼容 LYX 主机模块和支持其 Modbus UART 命令的 MCU 固件 |
+| 仅 Fluidd，`--frontend-only` | 已工作的同源 Moonraker 接口；后台已安装并加载 |
 
-本版网页只显示 LYX，不查询 TMC 状态；机器仍可同时使用 TMC，原有运动控制、固件支持和自带保护不变。新的 `plan/install --drivers tmc` 会明确拒绝，交互向导也没有纯 TMC 选项。旧版含 TMC 安装记录的收据仍可回滚；这不代表新版提供 TMC 卡片。
+v1.0.0 的 `install.sh` 严格校验已有三份 LYX 模块与下述 `patched_sha256` 一致；只安装监控后台/卡片。依赖缺失或版本未知即停止，必须先单独准备和验证驱动支持。`--with-lyx` 是历史低层工具选项，不会从新的通用入口调用。
+
+本版网页只显示 LYX，不查询 TMC 状态；机器仍可同时使用 TMC，原有运动控制、固件支持和自带保护不变。早期工具的参数和收据回退见[历史安装手册](LEGACY_INSTALLATION.md)。
 
 Klipper 原有 `make menuconfig`／`make` 流程仍按各主板使用，监测安装不会修改它。C8P 两个构建入口是此前提供的可选工具，不是对其他 MCU 的限制。安装可配置路径也不等于所有 Klipper、Fluidd 或厂商版本已经实测。
 

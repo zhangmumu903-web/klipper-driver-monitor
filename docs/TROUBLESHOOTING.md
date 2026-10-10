@@ -44,3 +44,13 @@ python3 -B backend/test_driver_monitor.py
 仅需 Python 标准库与完整仓库内 `vendor/lyx` 三文件，不需要 Klipper 安装或设备。启动时校验三份源码的固定 SHA256；文件缺失或哈希不同会在测试开始前失败，不能通过跳过真实原生路径来声称全部回归通过。
 
 若有意升级依赖，应先审查驱动协议、锁、读写和配置变化，再同步测试基线；不要仅为消除错误随意更新期望哈希。完整测试范围与尚未验证部分见[验证记录](VALIDATION.md)。
+
+## v1.0.0 安装维护
+
+- `Compatible LYX host dependencies are required`：现有模块与已审阅版本不同。先核对[依赖](DEPENDENCIES.md)，监控入口不会偷偷更新驱动。
+- `Unknown local edit`：受管程序或配置被改过。先备份并核对提示路径，`--yes` 不会绕过保护。
+- `pending.json`：上次事务未完成，沿用原 `--state-dir` 运行 `rollback.sh`。
+- Fluidd 更新后卡片消失：运行 `repair.sh` 修复脚本标记，不恢复整份旧首页。
+- `files_ok` 但 `monitor_loaded:false`：仅证明文件安装正确；检查主机进程重载、Moonraker 连接与认证。
+- 机器地址变了：在原状态目录上重新 `install.sh --origin 新地址 --api-url 新地址`，核实 `hostname`；不编辑公共源码。
+- 布局配置错误：页面提示并用默认布局；需要恢复时使用 `repair.sh --reset-layout`。

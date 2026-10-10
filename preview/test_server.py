@@ -59,6 +59,27 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(evidence['get_counts'], {
             '/printer/info': 1, '/printer/objects/list': 1, '/printer/objects/query': 1})
 
+    def test_user_layout_and_styles_are_same_origin_and_survive_scenario_changes(self):
+        layout, _ = self.read('/driver-monitor-user/layout.json')
+        self.assertEqual(json.loads(layout)['mode'], 'cards')
+        style, content_type = self.read('/driver-monitor-user/custom.css')
+        self.assertIn('text/css', content_type)
+        self.assertIn('ShadowRoot', style)
+        try:
+            server.state['layout_mode'] = 'z-overview'
+            server.set_scenario({'scenario': 'four_z', 'auto_enabled': False})
+            layout, _ = self.read('/driver-monitor-user/layout.json')
+            self.assertEqual(json.loads(layout)['mode'], 'z-overview')
+            monitor = server.status()['driver_monitor']
+            self.assertEqual([entry['stepper'] for entry in monitor['drivers']],
+                             ['stepper_z', 'stepper_z1', 'stepper_z2', 'stepper_z3'])
+            self.assertEqual(len(monitor['protection']), 4)
+            self.assertTrue(monitor['shutdown_on_alarm'])
+            self.assertIn('tmc2209 extruder', server.status())
+        finally:
+            server.state['layout_mode'] = 'cards'
+            server.set_scenario({'scenario': 'multiple', 'auto_enabled': False})
+
     def test_tmc_only_fixture_retains_tmc_objects_and_has_no_lyx_drivers(self):
         try:
             server.set_scenario({'scenario': 'tmc_only', 'auto_enabled': False})
