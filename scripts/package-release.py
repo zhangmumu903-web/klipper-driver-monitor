@@ -22,11 +22,12 @@ if [[ -f "$KDM_SCRIPT_DIR/scripts/manage.py" && -f "$KDM_SCRIPT_DIR/VERSION" ]];
   exec python3 "$KDM_SCRIPT_DIR/scripts/manage.py" install "$@"
 fi
 # Keep stdin attached to the terminal so the downloaded manager can prompt.
-exec python3 -c "$(cat <<'KDM_BOOTSTRAP_PY'
+KDM_BOOTSTRAP_SOURCE=$(cat <<'KDM_BOOTSTRAP_PY'
 '''
     suffix = '''
 KDM_BOOTSTRAP_PY
-)" install "$@"
+)
+exec python3 -c "$KDM_BOOTSTRAP_SOURCE" install "$@"
 '''
     return (prelude + (ROOT / 'scripts/distribution.py').read_text() + suffix).encode()
 

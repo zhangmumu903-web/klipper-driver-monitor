@@ -27,17 +27,25 @@ def download(url, limit):
     return data
 
 
-def select_release(metadata):
-    tag = metadata.get('tag_name', '')
-    if metadata.get('draft') or metadata.get('prerelease') or not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
+def select_release_url(url):
+    prefix = 'https://github.com/%s/releases/tag/' % REPOSITORY
+    if not url.startswith(prefix):
+        raise ValueError('稳定版跳转目标不是本仓库的发行标签')
+    tag = url[len(prefix):]
+    if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
         raise ValueError('没有符合要求的正式稳定版本')
-    assets = {item.get('name'): item.get('browser_download_url')
-              for item in metadata.get('assets', [])}
     base = 'https://github.com/%s/releases/download/%s/' % (REPOSITORY, tag)
-    for name in (ARCHIVE, 'SHA256SUMS'):
-        if assets.get(name) != base + name:
-            raise ValueError('稳定版本缺少完整安装包或校验文件: ' + name)
-    return tag, assets[ARCHIVE], assets['SHA256SUMS']
+    return tag, base + ARCHIVE, base + 'SHA256SUMS'
+
+
+def resolve_release():
+    # GitHub's official latest redirect excludes draft/prerelease releases and
+    # does not consume the anonymous REST API quota. Pin all assets to its tag.
+    request = urllib.request.Request(
+        'https://github.com/%s/releases/latest' % REPOSITORY,
+        headers={'User-Agent': 'klipper-driver-monitor-installer'})
+    with urllib.request.urlopen(request, timeout=40) as response:
+        return select_release_url(response.geturl())
 
 
 def verify_archive(data, checksum):
@@ -83,9 +91,7 @@ def extract_package(data, destination):
 
 
 def fetch_release(cache=None):
-    metadata = json.loads(download('https://api.github.com/repos/%s/releases/latest' % REPOSITORY,
-                                   1024 * 1024))
-    tag, archive_url, sums_url = select_release(metadata)
+    tag, archive_url, sums_url = resolve_release()
     data = download(archive_url, MAX_ARCHIVE)
     digest = verify_archive(data, download(sums_url, 16384))
     cache = Path(cache or Path.home() / '.local/share/klipper-driver-monitor/packages').expanduser()

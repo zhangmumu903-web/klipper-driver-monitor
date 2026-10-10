@@ -3,6 +3,7 @@ import importlib.util
 import io
 from pathlib import Path
 import tarfile
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -27,24 +28,25 @@ def archive(entries):
 
 
 class DistributionTest(unittest.TestCase):
-    def metadata(self):
-        base = 'https://github.com/' + d.REPOSITORY + '/releases/download/v1.0.0/'
-        return {'tag_name': 'v1.0.0', 'draft': False, 'prerelease': False,
-                'assets': [{'name': name, 'browser_download_url': base + name}
-                           for name in [d.ARCHIVE, 'SHA256SUMS']]}
-
-    def test_only_stable_complete_expected_origin_release_is_selected(self):
-        self.assertEqual('v1.0.0', d.select_release(self.metadata())[0])
-        for key in ('draft', 'prerelease'):
-            item = self.metadata(); item[key] = True
+    def test_only_stable_expected_origin_release_is_selected(self):
+        base = 'https://github.com/' + d.REPOSITORY + '/releases/tag/'
+        self.assertEqual('v1.0.1', d.select_release_url(base + 'v1.0.1')[0])
+        for url in ['https://example.org/v1.0.1', base + 'v1.0.1-beta',
+                    base + 'v1.0.1?x=1', base + '../download/v1.0.1',
+                    base.replace('https:', 'http:') + 'v1.0.1']:
             with self.assertRaises(ValueError):
-                d.select_release(item)
-        item = self.metadata(); item['assets'][0]['browser_download_url'] = 'https://example.org/code'
-        with self.assertRaises(ValueError):
-            d.select_release(item)
-        item = self.metadata(); item['assets'].pop()
-        with self.assertRaises(ValueError):
-            d.select_release(item)
+                d.select_release_url(url)
+
+    def test_resolution_uses_public_web_redirect_not_anonymous_api(self):
+        with patch.object(d.urllib.request, 'urlopen') as opener:
+            opener.return_value.__enter__.return_value.geturl.return_value = (
+                'https://github.com/' + d.REPOSITORY + '/releases/tag/v1.0.1')
+            tag, url, sums = d.resolve_release()
+            self.assertEqual('v1.0.1', tag)
+            self.assertEqual('https://github.com/' + d.REPOSITORY + '/releases/latest',
+                             opener.call_args.args[0].full_url)
+            self.assertTrue(url.endswith('/v1.0.1/' + d.ARCHIVE))
+            self.assertTrue(sums.endswith('/v1.0.1/SHA256SUMS'))
 
     def test_checksum_requires_exactly_one_matching_archive(self):
         data = b'package'
@@ -84,6 +86,7 @@ class DistributionTest(unittest.TestCase):
         source = (ROOT / 'install.sh').read_text()
         embedded = source.split("KDM_BOOTSTRAP_PY'\n", 1)[1].split('\nKDM_BOOTSTRAP_PY\n', 1)[0]
         self.assertEqual((ROOT / 'scripts/distribution.py').read_text(), embedded)
+        subprocess.run(['bash', '-n', str(ROOT / 'install.sh')], check=True)
 
 
 if __name__ == '__main__':
