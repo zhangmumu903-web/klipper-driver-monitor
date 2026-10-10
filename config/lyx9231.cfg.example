@@ -1,0 +1,29 @@
+# 驱动配置片段，不是完整 printer.cfg。
+# 保留现有 stepper_x 的引脚、归零和机械参数，不要复制出重复配置节。
+# 按实际主板／模块资料替换 <UART_PIN>。
+# 示例电流只说明语法，不是通用电机推荐值。
+# 对应运动配置必须已经具有：
+# [stepper_x]
+# microsteps: 16
+# full_steps_per_rotation: 200
+
+[lyx9231 stepper_x]
+uart_pin: <UART_PIN>
+uart_address: 1
+sense_resistor: 0.050
+run_current: 1.0
+hold_current: 0.5
+# 必须与现有 stepper_x 的 microsteps 相等。
+microstep: 16
+# 1 对应 200 整步，2 对应 400 整步，必须匹配运动配置。
+driver_motor_type: 1
+driver_op_mode: 2
+# 此例关闭半流；hold_current 仍只是配置比例，不证明实际保持电流。
+driver_half_cur_en: 0
+driver_half_cur_time: 3000
+driver_boost_level: 1
+driver_noise_en: 0
+
+# 安装监测模块后，另行加载 backend/driver-monitor.cfg.sample。
+# 原生 LYX 主机代码和 MCU 固件必须已匹配。
+# 重新加载 Klipper 会由原生驱动初始化／写入配置寄存器。

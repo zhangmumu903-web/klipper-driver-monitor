@@ -1,0 +1,16 @@
+{
+  "upstream": "https://github.com/zylo117/klipper",
+  "upstream_commit": "231c50815e385e3ecae671577a9815f6f5b5d4a9",
+  "license": "GPL-3.0",
+  "upstream_sha256": {
+    "lyx.py": "ee459dfdb3b441cba1bf7dc11b294c5e5130adcf50ba2cda7f7d0c2be2c73bc3",
+    "lyx9231.py": "5925fc8c807d3776df5bf10cc7a5fca56385d03cac346ac3365539db88002fe4",
+    "lyx_uart.py": "5fd894015daa0e3e5f192d289416889fc31bd124c3a215bc3136d087dcde3128"
+  },
+  "patched_sha256": {
+    "lyx.py": "c2d0eb148237b851836fbebcfdf4c85ab003466d73ad3b53bf6761e26ddf8ded",
+    "lyx9231.py": "8e2fdf3fa4e5a547beb5953a56716010546347b2096d906cb92f849765d073bc",
+    "lyx_uart.py": "27289a755fdb413f34ebfc290c16d1e5969308540a5da9a5138b47fd32827abc"
+  },
+  "scope": "Reviewed patched host modules from the 2026-10-07 configuration readback baseline; not unmodified upstream. See docs/DEPENDENCIES.md."
+}

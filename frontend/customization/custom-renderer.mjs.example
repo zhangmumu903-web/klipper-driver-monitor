@@ -1,0 +1,14 @@
+// 可选的管理员自定义模块，复制为 custom-renderer.js 后，在 layout.json 中
+// 设置 custom_renderer.enabled=true。该文件是与 Fluidd 同源执行的可信代码，
+// 不应安装不明来源的脚本。只用于附加显示；不要在此发出设备控制命令。
+// 主卡片的报警/故障/保护显示由框架维护。此函数收到冻结的显示数据，
+// 不含控制器或 Moonraker API。每次后台快照更新时会调用一次。
+export function render({element, driver, readings, status}) {
+  const line = document.createElement('p');
+  // 断线或目标校验失败时 readings=null；状态恢复后重新传入缓存数据。
+  line.textContent = status.trusted
+    ? `${driver.stepper} · 型号 ${readings?.CHIP_MODEL?.value ?? '未读取'}`
+    : status.message;
+  element.replaceChildren(line);
+  // 若创建定时器或监听器，可返回一个清理函数，下次更新/移除卡片前调用。
+}
